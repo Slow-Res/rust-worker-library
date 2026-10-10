@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SearchBox } from './SearchBox'
+import { shouldSync } from './shouldSync'
 
 beforeEach(() => vi.useFakeTimers())
 afterEach(() => vi.useRealTimers())
@@ -37,5 +38,35 @@ describe('SearchBox', () => {
 
     expect(screen.getByRole('searchbox')).toHaveValue('two')
     expect(onSearch).not.toHaveBeenCalled()
+  })
+
+  it('does not overwrite newer typed text when the committed value changes mid-typing', () => {
+    const onSearch = vi.fn()
+    const { rerender } = render(<SearchBox label="Search" value="" onSearch={onSearch} />)
+    const input = screen.getByRole('searchbox')
+
+    fireEvent.change(input, { target: { value: 'war' } })
+    act(() => void vi.advanceTimersByTime(300))
+    expect(onSearch).toHaveBeenCalledExactlyOnceWith('war')
+
+    fireEvent.change(input, { target: { value: 'wars' } })
+    rerender(<SearchBox label="Search" value="war" onSearch={onSearch} />)
+
+    expect(input).toHaveValue('wars')
+  })
+})
+
+describe('shouldSync', () => {
+  it('never syncs while typing', () => {
+    expect(shouldSync('wars', 'war', true)).toBe(false)
+  })
+
+  it('syncs when idle and the values differ', () => {
+    expect(shouldSync('one', 'two', false)).toBe(true)
+  })
+
+  it('compares trimmed values', () => {
+    expect(shouldSync('war ', 'war', false)).toBe(false)
+    expect(shouldSync('war', ' war', false)).toBe(false)
   })
 })
