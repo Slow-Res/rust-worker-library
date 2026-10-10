@@ -13,7 +13,18 @@ export function formatDate(iso: string): string {
   return `${date.getFullYear()}-${month}-${day}`
 }
 
-/** Only same-site paths are valid post-login targets (prevents open redirects). */
+/**
+ * Only same-site paths are valid post-login targets (prevents open redirects).
+ * Browsers treat `\` as `/`, so `/\evil.com` would become the protocol-relative `//evil.com`;
+ * control characters (tab, newline) are stripped by URL parsers and can hide a second slash.
+ */
 export function safeNextPath(next: string | null): string | null {
-  return next !== null && next.startsWith('/') && !next.startsWith('//') ? next : null
+  if (next === null || !next.startsWith('/')) return null
+  if (next[1] === '/') return null
+  if (next.includes('\\')) return null
+  for (let i = 0; i < next.length; i++) {
+    const code = next.charCodeAt(i)
+    if (code < 0x20 || code === 0x7f) return null
+  }
+  return next
 }
