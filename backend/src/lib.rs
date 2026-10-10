@@ -4,8 +4,10 @@
 //! library so integration tests can drive the real router.
 
 pub mod app;
+pub mod auth;
 pub mod cli;
 pub mod clock;
+pub mod commands;
 pub mod config;
 pub mod db;
 pub mod error;

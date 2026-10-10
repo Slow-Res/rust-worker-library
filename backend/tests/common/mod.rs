@@ -13,6 +13,7 @@ use axum::body::Body;
 use axum::http::{HeaderMap, Method, Request, StatusCode, header};
 use chrono::{DateTime, Utc};
 use http_body_util::BodyExt;
+use library_backend::auth::AuthService;
 use library_backend::build_router;
 use library_backend::clock::FixedClock;
 use library_backend::config::{Config, LogFormat};
@@ -27,6 +28,7 @@ pub type TestResponse = (StatusCode, HeaderMap, Value);
 /// The real router wired to a fresh test database and a controllable clock.
 pub struct TestApp {
     pub router: Router,
+    pub auth: AuthService,
     pub clock: Arc<FixedClock>,
     pub pool: SqlitePool,
 }
@@ -44,6 +46,7 @@ impl TestApp {
         let config = Arc::new(test_config());
         let state = AppState::new(pool.clone(), config, clock.clone());
         Self {
+            auth: state.auth.clone(),
             router: build_router(state),
             clock,
             pool,
@@ -66,6 +69,29 @@ impl TestApp {
         self.send(Method::DELETE, uri, None, cookie).await
     }
 
+    /// Create a librarian through the auth service, log in over HTTP, and
+    /// return the `Cookie` header value (`library_session=...`) to pass to
+    /// the request helpers.
+    pub async fn login(&self, username: &str, password: &str) -> String {
+        self.auth
+            .create_user(username, password)
+            .await
+            .expect("create test user");
+        let body = serde_json::json!({ "username": username, "password": password });
+        let (status, headers, _) = self.post_json("/api/auth/login", &body, None).await;
+        assert_eq!(status, StatusCode::OK, "test login failed");
+        let set_cookie = headers
+            .get(header::SET_COOKIE)
+            .expect("login sets a cookie")
+            .to_str()
+            .expect("cookie header is text");
+        set_cookie
+            .split(';')
+            .next()
+            .expect("cookie has a name=value pair")
+            .to_owned()
+    }
+
     /// Send a request through the router without opening a socket.
     /// `cookie` is a raw `Cookie` header value such as `library_session=...`.
     pub async fn send(
@@ -75,14 +101,27 @@ impl TestApp {
         body: Option<&Value>,
         cookie: Option<&str>,
     ) -> TestResponse {
+        self.send_raw(method, uri, body.map(Value::to_string), cookie)
+            .await
+    }
+
+    /// Like [`send`](Self::send) but with an arbitrary JSON-typed body, so
+    /// tests can post malformed JSON.
+    pub async fn send_raw(
+        &self,
+        method: Method,
+        uri: &str,
+        body: Option<String>,
+        cookie: Option<&str>,
+    ) -> TestResponse {
         let mut builder = Request::builder().method(method).uri(uri);
         if let Some(cookie) = cookie {
             builder = builder.header(header::COOKIE, cookie);
         }
         let request = match body {
-            Some(json) => builder
+            Some(text) => builder
                 .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(json.to_string())),
+                .body(Body::from(text)),
             None => builder.body(Body::empty()),
         }
         .expect("valid test request");

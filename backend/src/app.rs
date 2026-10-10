@@ -13,6 +13,7 @@ use tower_http::set_header::SetResponseHeaderLayer;
 use tower_http::timeout::TimeoutLayer;
 use tower_http::trace::TraceLayer;
 
+use crate::auth;
 use crate::error::AppError;
 use crate::health;
 use crate::state::AppState;
@@ -26,6 +27,7 @@ pub fn build_router(state: AppState) -> Router {
     // Add a feature by merging its router here, e.g. `.merge(books::routes())`.
     let api = Router::new()
         .merge(health::routes())
+        .merge(auth::routes())
         .fallback(api_not_found);
 
     let mut app = Router::new().nest("/api", api);
