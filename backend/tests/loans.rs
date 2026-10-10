@@ -367,3 +367,51 @@ async fn bad_query_params_are_400(pool: SqlitePool) {
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(json["error"]["code"], "bad_request");
 }
+
+#[sqlx::test]
+async fn concurrent_borrows_never_exceed_total_copies(pool: SqlitePool) {
+    const BORROWERS: usize = 8;
+    let app = TestApp::new(pool);
+    let cookie = app.login("ada", "password123").await;
+    let book = add_book(&app, &cookie, "Scarce", 2).await;
+    let mut members = Vec::new();
+    for n in 0..BORROWERS {
+        members.push(add_member(&app, &cookie, &format!("Member{n}")).await);
+    }
+
+    // All requests race through clones of the same router and pool.
+    let handles: Vec<_> = members
+        .into_iter()
+        .map(|member| {
+            let app = app.clone();
+            let cookie = cookie.clone();
+            tokio::spawn(async move {
+                let body = json!({ "book_id": book, "member_id": member });
+                app.post_json("/api/loans", &body, Some(&cookie)).await
+            })
+        })
+        .collect();
+
+    let mut created = 0;
+    let mut refused = 0;
+    for handle in handles {
+        let (status, _, json) = handle.await.unwrap();
+        match status {
+            StatusCode::CREATED => created += 1,
+            StatusCode::CONFLICT => {
+                assert_eq!(json["error"]["code"], "no_copies_available", "{json}");
+                refused += 1;
+            }
+            other => panic!("unexpected status {other}: {json}"),
+        }
+    }
+    assert_eq!((created, refused), (2, BORROWERS - 2));
+
+    let active: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM loans WHERE book_id = ? AND returned_at IS NULL")
+            .bind(book)
+            .fetch_one(&app.pool)
+            .await
+            .unwrap();
+    assert_eq!(active, 2);
+}
