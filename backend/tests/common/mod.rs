@@ -6,6 +6,7 @@
 //! setting only covers `#[test]` functions, so allow it explicitly.
 #![allow(dead_code, clippy::expect_used, clippy::unwrap_used)]
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::Router;
@@ -42,8 +43,23 @@ impl TestApp {
     /// Build the app from the pool that `#[sqlx::test]` hands to the test
     /// (already migrated, unique per test).
     pub fn new(pool: SqlitePool) -> Self {
+        Self::with_config(pool, test_config())
+    }
+
+    /// Like [`new`](Self::new) but serving the SPA from `dir`.
+    pub fn with_frontend_dir(pool: SqlitePool, dir: PathBuf) -> Self {
+        Self::with_config(
+            pool,
+            Config {
+                frontend_dir: Some(dir),
+                ..test_config()
+            },
+        )
+    }
+
+    fn with_config(pool: SqlitePool, config: Config) -> Self {
         let clock = Arc::new(FixedClock::new(start_time()));
-        let config = Arc::new(test_config());
+        let config = Arc::new(config);
         let state = AppState::new(pool.clone(), config, clock.clone());
         Self {
             auth: state.auth.clone(),
@@ -90,6 +106,34 @@ impl TestApp {
             .next()
             .expect("cookie has a name=value pair")
             .to_owned()
+    }
+
+    /// Send a request and return status, headers and the body as text, for
+    /// responses that are not JSON (static files, middleware rejections).
+    pub async fn send_text(
+        &self,
+        method: Method,
+        uri: &str,
+        body: Body,
+    ) -> (StatusCode, HeaderMap, String) {
+        let request = Request::builder()
+            .method(method)
+            .uri(uri)
+            .body(body)
+            .expect("valid test request");
+        let response = self
+            .router
+            .clone()
+            .oneshot(request)
+            .await
+            .expect("router is infallible");
+        let (parts, body) = response.into_parts();
+        let bytes = body.collect().await.expect("readable body").to_bytes();
+        (
+            parts.status,
+            parts.headers,
+            String::from_utf8_lossy(&bytes).into_owned(),
+        )
     }
 
     /// Send a request through the router without opening a socket.
@@ -146,6 +190,7 @@ impl TestApp {
 
 fn test_config() -> Config {
     Config {
+        // Unused: the pool comes from `#[sqlx::test]`, not from this URL.
         database_url: "sqlite::memory:".to_owned(),
         bind_addr: ([127, 0, 0, 1], 0).into(),
         frontend_dir: None,
