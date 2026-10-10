@@ -5,6 +5,9 @@ use std::path::PathBuf;
 
 use anyhow::{Context, bail};
 
+/// Ten years.
+const MAX_SESSION_TTL_HOURS: i64 = 87_600;
+
 /// Output format of the tracing subscriber.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LogFormat {
@@ -34,8 +37,11 @@ impl Config {
     /// process-global state.
     pub fn from_lookup(get: impl Fn(&str) -> Option<String>) -> anyhow::Result<Self> {
         let session_ttl_hours: i64 = parse_or(&get, "SESSION_TTL_HOURS", 168)?;
-        if session_ttl_hours < 1 {
-            bail!("SESSION_TTL_HOURS must be at least 1, got {session_ttl_hours}");
+        // The upper bound keeps `Duration::hours` and `now + ttl` from overflowing.
+        if !(1..=MAX_SESSION_TTL_HOURS).contains(&session_ttl_hours) {
+            bail!(
+                "SESSION_TTL_HOURS must be between 1 and {MAX_SESSION_TTL_HOURS}, got {session_ttl_hours}"
+            );
         }
 
         let log_format = match get("LOG_FORMAT").as_deref() {
@@ -117,5 +123,16 @@ mod tests {
         assert!(err.to_string().contains("BIND_ADDR"));
         assert!(Config::from_lookup(lookup(&[("LOG_FORMAT", "xml")])).is_err());
         assert!(Config::from_lookup(lookup(&[("SESSION_TTL_HOURS", "0")])).is_err());
+    }
+
+    #[test]
+    fn session_ttl_is_bounded() {
+        let ttl = |v: &str| Config::from_lookup(lookup(&[("SESSION_TTL_HOURS", v)]));
+        assert_eq!(ttl("1").unwrap().session_ttl_hours, 1);
+        assert_eq!(ttl("87600").unwrap().session_ttl_hours, 87_600);
+        for bad in ["0", "-5", "87601", "9223372036854775807"] {
+            let err = ttl(bad).unwrap_err();
+            assert!(err.to_string().contains("SESSION_TTL_HOURS"), "{bad}");
+        }
     }
 }
