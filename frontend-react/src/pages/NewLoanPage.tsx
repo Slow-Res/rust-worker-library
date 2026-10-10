@@ -91,6 +91,8 @@ export function NewLoanPage() {
           selectedId={bookId}
           onSelect={(id) => bookSelection.select(id, bookOptions)}
           isLoading={books.isFetching}
+          shown={books.data?.items.length}
+          total={books.data?.total}
           error={fields.book_id}
         />
         <Picker
@@ -101,6 +103,8 @@ export function NewLoanPage() {
           selectedId={memberId}
           onSelect={(id) => memberSelection.select(id, memberOptions)}
           isLoading={members.isFetching}
+          shown={members.data?.items.length}
+          total={members.data?.total}
           error={fields.member_id}
         />
         <ErrorMessage error={books.error ?? members.error} />

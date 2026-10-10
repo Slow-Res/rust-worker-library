@@ -40,7 +40,7 @@ export function LoansPage() {
               <button
                 type="button"
                 className={tab.status === status ? undefined : 'secondary outline'}
-                aria-pressed={tab.status === status}
+                aria-current={tab.status === status ? 'page' : undefined}
                 onClick={() => update({ status: tab.status === 'active' ? undefined : tab.status })}
               >
                 {tab.label}
@@ -53,7 +53,7 @@ export function LoansPage() {
       <ErrorMessage error={loans.error} />
       {loans.data && (
         <>
-          <LoansTable loans={loans.data.items} />
+          <LoansTable loans={loans.data.items} page={loans.data.page} />
           <Pagination
             page={loans.data.page}
             perPage={loans.data.per_page}

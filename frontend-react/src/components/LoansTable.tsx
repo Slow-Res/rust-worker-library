@@ -2,12 +2,15 @@ import { Link } from 'react-router'
 import type { Loan } from '../generated/Loan'
 import { useReturnLoan } from '../hooks/useReturnLoan'
 import { formatDate } from '../utils'
+import { EmptyList } from './EmptyList'
 import { ErrorMessage } from './ErrorMessage'
 
 interface LoansTableProps {
   loans: Loan[]
   /** Hide the member column when the table already belongs to one member. */
   showMember?: boolean
+  /** The page being shown, so an out-of-range page can link back to page 1. */
+  page?: number
 }
 
 function statusLabel(loan: Loan): string {
@@ -15,10 +18,10 @@ function statusLabel(loan: Loan): string {
   return loan.is_overdue ? 'Overdue' : 'Active'
 }
 
-export function LoansTable({ loans, showMember = true }: LoansTableProps) {
+export function LoansTable({ loans, showMember = true, page = 1 }: LoansTableProps) {
   const returnMutation = useReturnLoan()
 
-  if (loans.length === 0) return <p>No loans found.</p>
+  if (loans.length === 0) return <EmptyList message="No loans found." page={page} />
 
   return (
     <>

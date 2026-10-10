@@ -20,15 +20,17 @@ const book = {
 }
 const member = { id: 3, name: 'Ada', email: 'ada@example.com', active_loans: 0, created_at: '', updated_at: '' }
 
-const page = (items: unknown[]) => ({ items, page: 1, per_page: 20, total: items.length })
+const otherBook = { ...book, id: 8, title: 'Zzz Tales' }
 
-/** Books match only the empty search; any search text returns nothing. */
-function stubApi() {
+const page = (items: unknown[], total = items.length) => ({ items, page: 1, per_page: 20, total })
+
+/** The empty search returns Dune; any search text returns a different book. */
+function stubApi(bookTotal?: number) {
   vi.stubGlobal(
     'fetch',
     vi.fn((url: string) => {
       const params = new URL(url, 'http://x').searchParams
-      if (url.startsWith('/api/books')) return Promise.resolve(Response.json(page(params.get('q') ? [] : [book])))
+      if (url.startsWith('/api/books')) return Promise.resolve(Response.json(page(params.get('q') ? [otherBook] : [book], bookTotal)))
       return Promise.resolve(Response.json(page([member])))
     }),
   )
@@ -73,9 +75,23 @@ describe('NewLoanPage pickers', () => {
 
     await userEvent.type(screen.getByRole('searchbox', { name: 'Search books' }), 'zzz')
 
-    // Wait for the (debounced) empty search result to arrive.
-    await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining('q=zzz'), expect.anything()))
+    // The new results (a different book) must have rendered before we assert.
+    await screen.findByRole('option', { name: /Zzz Tales/ })
     expect(select).toHaveValue('7')
     expect(screen.getByRole('option', { name: /Dune/ })).toBeInTheDocument()
+  })
+
+  it('hints when the book results are truncated', async () => {
+    stubApi(25)
+    renderPage()
+    await bookSelect()
+    expect(await screen.findByText('Showing the first 1 of 25 — type to narrow the search')).toBeInTheDocument()
+  })
+
+  it('shows no hint when everything fits', async () => {
+    stubApi()
+    renderPage()
+    await bookSelect()
+    expect(screen.queryByText(/type to narrow the search/)).not.toBeInTheDocument()
   })
 })
