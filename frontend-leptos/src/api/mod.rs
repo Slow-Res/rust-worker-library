@@ -81,8 +81,8 @@ thread_local! {
 }
 
 /// Registers what to do when any (non-auth) request comes back 401. The auth
-/// provider uses this to clear the current user, which sends protected
-/// pages to the login form.
+/// provider uses this to clear the current user and send the visitor to the
+/// login form.
 pub fn set_unauthorized_handler(handler: impl Fn() + 'static) {
     ON_UNAUTHORIZED.with(|slot| *slot.borrow_mut() = Some(Rc::new(handler)));
 }

@@ -2,8 +2,9 @@
 
 use leptos::prelude::*;
 use leptos::task::spawn_local;
+use leptos_router::NavigateOptions;
 use leptos_router::components::Outlet;
-use leptos_router::hooks::use_location;
+use leptos_router::hooks::{use_location, use_navigate};
 use library_shared::CurrentUser;
 
 use crate::api;
@@ -44,8 +45,30 @@ pub fn AuthProvider(children: Children) -> impl IntoView {
     };
     provide_context(auth);
 
-    // Any 401 from the API means the session is gone.
-    api::set_unauthorized_handler(move || auth.user.set(None));
+    // Any 401 from the API means the session is gone: forget the user and, like
+    // the React app, go to `/login?next=<here>` (also from public pages).
+    // A mounted `RequireAuth` guard reacts to the cleared user by redirecting
+    // itself, so navigating here as well would redirect twice.
+    let navigate = use_navigate();
+    let location = use_location();
+    api::set_unauthorized_handler(move || {
+        auth.user.set(None);
+        if auth.guard_mounted.get_untracked() {
+            return;
+        }
+        let pathname = location.pathname.get_untracked();
+        if pathname.starts_with("/login") {
+            return;
+        }
+        let to = login_redirect_target(&pathname, &location.search.get_untracked());
+        navigate(
+            &to,
+            NavigateOptions {
+                replace: true,
+                ..Default::default()
+            },
+        );
+    });
 
     // `spawn_local` runs a (non-`Send`) future on the browser's event loop.
     spawn_local(async move {
