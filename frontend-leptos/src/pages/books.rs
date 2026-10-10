@@ -11,7 +11,7 @@ use crate::api::{self, ApiRequestError};
 use crate::auth::use_auth;
 use crate::browser::confirm;
 use crate::components::error_message::ErrorMessage;
-use crate::components::pagination::Pagination;
+use crate::components::pagination::{OutOfRange, Pagination};
 use crate::components::search_box::SearchBox;
 use crate::format::copies_label;
 use crate::url::{availability_param, build_url, page_param, parse_availability, parse_page};
@@ -49,7 +49,9 @@ pub fn Books() -> impl IntoView {
     });
 
     // Changing any filter returns to page 1; only paging keeps the others.
-    let go = move |q: &str, availability: Availability, page: u32| {
+    // Search/filter changes replace the history entry; page changes push one
+    // so Back returns to the previous page.
+    let go = move |q: &str, availability: Availability, page: u32, replace: bool| {
         navigate(
             &build_url(
                 "/books",
@@ -60,7 +62,7 @@ pub fn Books() -> impl IntoView {
                 ],
             ),
             NavigateOptions {
-                replace: true,
+                replace,
                 ..Default::default()
             },
         );
@@ -68,17 +70,27 @@ pub fn Books() -> impl IntoView {
 
     let on_search = {
         let go = go.clone();
-        Callback::new(move |text: String| go(text.trim(), availability.get_untracked(), 1))
+        Callback::new(move |text: String| go(text.trim(), availability.get_untracked(), 1, true))
     };
     let on_filter = {
         let go = go.clone();
         move |ev| {
             let value = event_target_value(&ev);
-            go(&q.get_untracked(), parse_availability(Some(&value)), 1);
+            go(
+                &q.get_untracked(),
+                parse_availability(Some(&value)),
+                1,
+                true,
+            );
         }
     };
     let on_page = Callback::new(move |next: u32| {
-        go(&q.get_untracked(), availability.get_untracked(), next);
+        go(
+            &q.get_untracked(),
+            availability.get_untracked(),
+            next,
+            false,
+        );
     });
 
     let delete = move |book: Book| {
@@ -135,6 +147,9 @@ pub fn Books() -> impl IntoView {
                     .get()
                     .map(|result| match result {
                         Err(e) => view! { <ErrorMessage error=e/> }.into_any(),
+                        Ok(list) if list.items.is_empty() && page.get() > 1 => {
+                            view! { <OutOfRange on_page/> }.into_any()
+                        }
                         Ok(list) if list.items.is_empty() => {
                             view! { <p>"No books found."</p> }.into_any()
                         }

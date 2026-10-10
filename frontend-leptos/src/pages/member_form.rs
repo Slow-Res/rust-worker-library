@@ -31,7 +31,6 @@ pub fn MemberEdit() -> impl IntoView {
     let member = LocalResource::new(move || async move { api::members::get(id).await });
 
     view! {
-        <h1>"Edit member"</h1>
         <Suspense fallback=|| view! { <p aria-busy="true">"Loading…"</p> }>
             {move || {
                 member
@@ -41,6 +40,7 @@ pub fn MemberEdit() -> impl IntoView {
                         Err(e) => view! { <ErrorMessage error=e/> }.into_any(),
                         Ok(Member { name, email, .. }) => {
                             view! {
+                                <h1>"Edit member"</h1>
                                 <MemberForm
                                     initial=MemberInput { name, email }
                                     save=move |input| async move {
@@ -81,11 +81,12 @@ where
         };
         let (save, navigate) = (save.clone(), navigate.clone());
         spawn_local(async move {
-            match save(input).await {
+            let result = save(input).await;
+            busy.set(false);
+            match result {
                 Ok(()) => navigate("/members", Default::default()),
                 Err(e) => error.set(Some(e)),
             }
-            busy.set(false);
         });
     };
 
@@ -94,7 +95,9 @@ where
     let invalid = move |name: &'static str| field(name).get().is_some().then_some("true");
 
     view! {
-        <form on:submit=on_submit>
+        // `novalidate` turns off the browser's own validation bubbles so the
+        // server's field errors (shown by <FieldError>) are what users see.
+        <form novalidate on:submit=on_submit>
             <label>
                 "Name"
                 <input

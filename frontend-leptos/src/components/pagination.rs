@@ -17,7 +17,7 @@ pub fn Pagination(page: u32, per_page: u32, total: u64, on_page: Callback<u32>) 
             <nav class="pagination">
                 <button
                     class="secondary outline"
-                    disabled=page <= 1
+                    disabled={page <= 1}
                     on:click=move |_| on_page.run(page - 1)
                 >
                     "Prev"
@@ -25,7 +25,9 @@ pub fn Pagination(page: u32, per_page: u32, total: u64, on_page: Callback<u32>) 
                 <span>{format!("Page {page} of {pages}")}</span>
                 <button
                     class="secondary outline"
-                    disabled=page >= pages
+                    // `view!` parses `>` as the end of the tag, even inside a closure,
+                    // so a comparison in an attribute must be wrapped in braces.
+                    disabled={page >= pages}
                     on:click=move |_| on_page.run(page + 1)
                 >
                     "Next"
@@ -33,6 +35,26 @@ pub fn Pagination(page: u32, per_page: u32, total: u64, on_page: Callback<u32>) 
             </nav>
         }
     })
+}
+
+/// Shown instead of an empty list when `?page=` is past the last page (for
+/// example after deleting the last row of the last page).
+#[component]
+pub fn OutOfRange(on_page: Callback<u32>) -> impl IntoView {
+    view! {
+        <p>
+            "This page has no results. "
+            <a
+                href="#"
+                on:click=move |ev| {
+                    ev.prevent_default();
+                    on_page.run(1);
+                }
+            >
+                "Go to page 1"
+            </a>
+        </p>
+    }
 }
 
 #[cfg(test)]

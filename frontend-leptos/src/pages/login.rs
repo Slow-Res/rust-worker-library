@@ -34,14 +34,17 @@ pub fn Login() -> impl IntoView {
         let next = safe_next(query.read_untracked().get("next").as_deref());
         let navigate = navigate.clone();
         spawn_local(async move {
-            match api::auth::login(&request).await {
+            let result = api::auth::login(&request).await;
+            // Reset `busy` before navigating: after `navigate` this page's
+            // reactive owner may already be disposed.
+            busy.set(false);
+            match result {
                 Ok(user) => {
                     auth.user.set(Some(user));
                     navigate(&next, Default::default());
                 }
                 Err(e) => error.set(Some(e)),
             }
-            busy.set(false);
         });
     };
 
@@ -51,7 +54,9 @@ pub fn Login() -> impl IntoView {
 
     view! {
         <h1>"Log in"</h1>
-        <form on:submit=on_submit>
+        // `novalidate` turns off the browser's own validation bubbles so the
+        // server's field errors (shown by <FieldError>) are what users see.
+        <form novalidate on:submit=on_submit>
             <label>
                 "Username"
                 <input

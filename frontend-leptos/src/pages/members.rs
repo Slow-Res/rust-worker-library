@@ -9,7 +9,7 @@ use library_shared::{Member, MemberQuery};
 use crate::api::{self, ApiRequestError};
 use crate::browser::confirm;
 use crate::components::error_message::ErrorMessage;
-use crate::components::pagination::Pagination;
+use crate::components::pagination::{OutOfRange, Pagination};
 use crate::components::search_box::SearchBox;
 use crate::url::{build_url, page_param, parse_page};
 
@@ -33,20 +33,22 @@ pub fn Members() -> impl IntoView {
         async move { api::members::list(&request).await }
     });
 
-    let go = move |q: &str, page: u32| {
+    // Search changes replace the history entry (no entry per keystroke
+    // pause); page changes push one so Back returns to the previous page.
+    let go = move |q: &str, page: u32, replace: bool| {
         navigate(
             &build_url("/members", &[("q", q), ("page", &page_param(page))]),
             NavigateOptions {
-                replace: true,
+                replace,
                 ..Default::default()
             },
         );
     };
     let on_search = {
         let go = go.clone();
-        Callback::new(move |text: String| go(text.trim(), 1))
+        Callback::new(move |text: String| go(text.trim(), 1, true))
     };
-    let on_page = Callback::new(move |next: u32| go(&q.get_untracked(), next));
+    let on_page = Callback::new(move |next: u32| go(&q.get_untracked(), next, false));
 
     let delete = move |member: Member| {
         if !confirm(&format!("Delete member \"{}\"?", member.name)) {
@@ -76,6 +78,9 @@ pub fn Members() -> impl IntoView {
                     .get()
                     .map(|result| match result {
                         Err(e) => view! { <ErrorMessage error=e/> }.into_any(),
+                        Ok(list) if list.items.is_empty() && page.get() > 1 => {
+                            view! { <OutOfRange on_page/> }.into_any()
+                        }
                         Ok(list) if list.items.is_empty() => {
                             view! { <p>"No members found."</p> }.into_any()
                         }

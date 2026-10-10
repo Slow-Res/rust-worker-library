@@ -1,14 +1,13 @@
 //! `/members/:id`: member info and their loan history.
 
 use leptos::prelude::*;
-use leptos_router::NavigateOptions;
 use leptos_router::hooks::{use_navigate, use_params_map, use_query_map};
 use library_shared::{LoanQuery, LoanStatus};
 
-use crate::api;
+use crate::api::{self, ApiRequestError};
 use crate::browser::local_date;
 use crate::components::error_message::ErrorMessage;
-use crate::components::pagination::Pagination;
+use crate::components::pagination::{OutOfRange, Pagination};
 use crate::pages::loans::LoansTable;
 use crate::pages::not_found::NotFound;
 use crate::url::{build_url, page_param, parse_id, parse_page};
@@ -40,17 +39,19 @@ pub fn MemberDetail() -> impl IntoView {
     });
 
     let on_page = Callback::new(move |next: u32| {
+        // Push (not replace) so Back returns to the previous page.
         navigate(
             &build_url(&format!("/members/{id}"), &[("page", &page_param(next))]),
-            NavigateOptions {
-                replace: true,
-                ..Default::default()
-            },
+            Default::default(),
         );
     });
     // Returning a loan changes both the loan list and the member's active-loan count.
     let on_changed = Callback::new(move |()| version.update(|v| *v += 1));
+    // Owned here so a Return error survives the refetch that replaces the table.
+    let return_error = RwSignal::new(None::<ApiRequestError>);
 
+    // The loans section is only rendered inside the `Ok` arm below, so an
+    // unknown member shows just the not-found message.
     view! {
         <Suspense fallback=|| view! { <p aria-busy="true">"Loading…"</p> }>
             {move || {
@@ -74,24 +75,29 @@ pub fn MemberDetail() -> impl IntoView {
                                         "Edit"
                                     </a>
                                 </div>
-                            }
-                                .into_any()
-                        }
-                    })
-            }}
-        </Suspense>
-        <h2>"Loans"</h2>
-        <Suspense fallback=|| view! { <p aria-busy="true">"Loading…"</p> }>
-            {move || {
-                loans
-                    .get()
-                    .map(|result| match result {
-                        Err(e) => view! { <ErrorMessage error=e/> }.into_any(),
-                        Ok(list) => {
-                            let (per_page, total) = (list.per_page, list.total);
-                            view! {
-                                <LoansTable loans=list.items on_changed/>
-                                <Pagination page=page.get() per_page total on_page/>
+                                <h2>"Loans"</h2>
+                                <Suspense fallback=|| {
+                                    view! { <p aria-busy="true">"Loading…"</p> }
+                                }>
+                                    {move || {
+                                        loans
+                                            .get()
+                                            .map(|result| match result {
+                                                Err(e) => view! { <ErrorMessage error=e/> }.into_any(),
+                                                Ok(list) if list.items.is_empty() && page.get() > 1 => {
+                                                    view! { <OutOfRange on_page/> }.into_any()
+                                                }
+                                                Ok(list) => {
+                                                    let (per_page, total) = (list.per_page, list.total);
+                                                    view! {
+                                                        <LoansTable loans=list.items on_changed error=return_error/>
+                                                        <Pagination page=page.get() per_page total on_page/>
+                                                    }
+                                                        .into_any()
+                                                }
+                                            })
+                                    }}
+                                </Suspense>
                             }
                                 .into_any()
                         }
