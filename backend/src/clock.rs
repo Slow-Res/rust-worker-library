@@ -10,14 +10,23 @@ pub trait Clock: Send + Sync {
     fn now(&self) -> DateTime<Utc>;
 }
 
-/// The real wall clock.
+/// The real wall clock, truncated to whole seconds. The database stores Unix
+/// seconds, so handing services a sub-second `now` would let in-memory
+/// comparisons (`due_at < now`) disagree with SQL filters bound to the stored,
+/// truncated value. Truncating at the source keeps every caller consistent.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct SystemClock;
 
 impl Clock for SystemClock {
     fn now(&self) -> DateTime<Utc> {
-        Utc::now()
+        truncate_to_seconds(Utc::now())
     }
+}
+
+fn truncate_to_seconds(at: DateTime<Utc>) -> DateTime<Utc> {
+    // Seconds within `at`'s own range are always representable, so the
+    // fallback is unreachable; it only avoids an `unwrap`.
+    DateTime::from_timestamp(at.timestamp(), 0).unwrap_or(at)
 }
 
 /// A clock you control. Intended for tests: set or advance time and every
@@ -57,6 +66,16 @@ impl Clock for FixedClock {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn system_clock_has_no_sub_second_part() {
+        assert_eq!(SystemClock.now().timestamp_subsec_nanos(), 0);
+        let at = DateTime::from_timestamp(1_800_000_000, 999_999_999).unwrap();
+        assert_eq!(
+            truncate_to_seconds(at),
+            DateTime::from_timestamp(1_800_000_000, 0).unwrap()
+        );
+    }
 
     #[test]
     fn fixed_clock_set_and_advance() {
