@@ -1,6 +1,5 @@
 //! Top navigation bar and page container.
 
-use gloo_timers::future::TimeoutFuture;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos_router::components::A;
@@ -19,13 +18,13 @@ pub fn Layout(children: Children) -> impl IntoView {
         spawn_local(async move {
             // Even if the server call fails, drop the local session view.
             let _ = api::auth::logout().await;
-            // Navigate first: clearing the user while still on a protected
-            // page would make `RequireAuth` redirect to /login before we leave.
-            navigate("/books", Default::default());
-            // The router swaps routes asynchronously; yield to the event loop
-            // so `RequireAuth` is unmounted before the user disappears.
-            TimeoutFuture::new(0).await;
+            // Tell a mounted `RequireAuth` this is a log out, not session
+            // loss, so it does not redirect to /login. It resets the flag
+            // itself (when it sees it, or when it unmounts), so no path
+            // leaves it stuck.
+            auth.logging_out.set(auth.guard_mounted.get_untracked());
             auth.user.set(None);
+            navigate("/books", Default::default());
         });
     };
 

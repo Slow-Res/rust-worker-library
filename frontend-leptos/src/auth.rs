@@ -18,6 +18,11 @@ pub struct AuthContext {
     /// False until the startup `/api/auth/me` check finishes, so protected
     /// pages do not flash a redirect to `/login` on refresh.
     pub ready: RwSignal<bool>,
+    /// True while a `RequireAuth` guard is mounted (protected page showing).
+    pub guard_mounted: RwSignal<bool>,
+    /// Set by log out when the guard is mounted, so the guard lets the user
+    /// disappear without redirecting to `/login`; the guard resets it.
+    pub logging_out: RwSignal<bool>,
 }
 
 /// Reads the [`AuthContext`] provided by [`AuthProvider`].
@@ -34,6 +39,8 @@ pub fn AuthProvider(children: Children) -> impl IntoView {
     let auth = AuthContext {
         user: RwSignal::new(None),
         ready: RwSignal::new(false),
+        guard_mounted: RwSignal::new(false),
+        logging_out: RwSignal::new(false),
     };
     provide_context(auth);
 
@@ -50,12 +57,33 @@ pub fn AuthProvider(children: Children) -> impl IntoView {
     children()
 }
 
+/// Where to send an unauthenticated visitor: `/login?next=<path+query>`.
+/// Never builds `next` from a login URL (that is how redirect loops grow).
+/// Leptos' `search` has no leading `?`; it is added back when non-empty.
+pub fn login_redirect_target(pathname: &str, search: &str) -> String {
+    if pathname.starts_with("/login") {
+        return "/login".to_string();
+    }
+    let here = if search.is_empty() {
+        pathname.to_string()
+    } else {
+        format!("{pathname}?{search}")
+    };
+    build_url("/login", &[("next", &here)])
+}
+
 /// Layout route for protected pages: renders the matched child route via
 /// `<Outlet/>` when logged in, otherwise redirects to `/login?next=<here>`.
 #[component]
 pub fn RequireAuth() -> impl IntoView {
     let auth = use_auth();
     let location = use_location();
+
+    auth.guard_mounted.set(true);
+    on_cleanup(move || {
+        auth.guard_mounted.set(false);
+        auth.logging_out.set(false);
+    });
 
     view! {
         // This closure re-runs whenever `auth.ready` / `auth.user` change.
@@ -69,16 +97,40 @@ pub fn RequireAuth() -> impl IntoView {
                 view! { <p aria-busy="true">"Loading…"</p> }.into_any()
             } else if auth.user.get().is_some() {
                 view! { <Outlet/> }.into_any()
+            } else if auth.logging_out.get_untracked() {
+                // Deliberate log out: the page is about to be replaced, so
+                // show nothing instead of redirecting to the login form.
+                auth.logging_out.set(false);
+                ().into_any()
             } else {
-                // Leptos' `search` has no leading `?`; add it back when non-empty.
-                let search = location.search.get_untracked();
-                let here = match search.is_empty() {
-                    true => location.pathname.get_untracked(),
-                    false => format!("{}?{search}", location.pathname.get_untracked()),
-                };
-                let to = build_url("/login", &[("next", &here)]);
+                let to = login_redirect_target(
+                    &location.pathname.get_untracked(),
+                    &location.search.get_untracked(),
+                );
                 view! { <leptos_router::components::Redirect path=to/> }.into_any()
             }
         }}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn keeps_path_and_query_in_next() {
+        assert_eq!(
+            login_redirect_target("/members", ""),
+            "/login?next=%2Fmembers"
+        );
+        assert_eq!(
+            login_redirect_target("/members", "x=1"),
+            "/login?next=%2Fmembers%3Fx%3D1"
+        );
+    }
+
+    #[test]
+    fn never_nests_a_login_url() {
+        assert_eq!(login_redirect_target("/login", "next=%2Fbooks"), "/login");
     }
 }
