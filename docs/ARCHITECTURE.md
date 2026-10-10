@@ -53,7 +53,11 @@ breaks the build of both frontends instead of breaking at runtime.
 ## Layers
 
 Each backend feature (`auth`, `books`, `members`, `loans`) is a module with the
-same five files. Taking `loans` as the example:
+same core files (`mod.rs`, `routes.rs`, `service.rs`, `repo.rs`, `sqlite.rs`),
+plus a few extras: `books` and `members` add a `domain.rs` (validation and
+normalization of their input), and `auth` adds `extractor.rs` (the `AuthUser`
+extractor) and `password.rs` (Argon2 hashing). `loans` is the canonical,
+unadorned example:
 
 | Layer | File | Job | May mention | Must not mention |
 |---|---|---|---|---|
@@ -137,17 +141,17 @@ actual borrowing is the form submit.
 5. **Listener and router.** `axum::serve` accepts the connection
    ([backend/src/server.rs:27](../backend/src/server.rs#L27)) and hands the
    request to the router built by
-   [`build_router`](../backend/src/app.rs#L29). The `/api` router is nested at
-   [app.rs:39](../backend/src/app.rs#L39); `loans::routes()` is merged in at
-   [app.rs:36](../backend/src/app.rs#L36), and
+   [`build_router`](../backend/src/app.rs#L34). The `/api` router is nested at
+   [app.rs:44](../backend/src/app.rs#L44); `loans::routes()` is merged in at
+   [app.rs:41](../backend/src/app.rs#L41), and
    [loans/routes.rs:17](../backend/src/loans/routes.rs#L17) maps
    `POST /loans` to the `create` handler. (The `/api` prefix is added by the
    `nest`, which is why the route says `/loans`.)
 
-6. **Middleware (outermost first)** from [app.rs:52-80](../backend/src/app.rs#L52):
+6. **Middleware (outermost first)** from [app.rs:57-87](../backend/src/app.rs#L57):
    request id (`x-request-id` is set if missing and echoed on the response) →
    `TraceLayer` (one log span per request with method, path and request id) →
-   15 s timeout → gzip compression → security headers → **64 KiB body limit**.
+   JSON error bodies (see [Error handling](#error-handling)) → 15 s timeout → gzip compression → security headers → **64 KiB body limit**.
    A `ServiceBuilder` lists layers top-to-bottom in the order a request meets
    them. A body over the limit is refused with 413 here, before any handler
    code sees it.
@@ -221,7 +225,7 @@ actual borrowing is the form submit.
        (dropping `tx` rolls the transaction back):
        book exists (line 162) → member exists (line 171) →
        free copy: `COUNT(*)` of unreturned loans of this book `>= total_copies`
-       (line 182-190) → member under the limit (line 193-201).
+       (lines 181-190) → member under the limit (lines 192-201).
     3. `INSERT INTO loans …` ([sqlite.rs:206](../backend/src/loans/sqlite.rs#L206)),
        then re-reads the row with its joined book title and member name
        (`fetch_loan`, [sqlite.rs:97](../backend/src/loans/sqlite.rs#L97)), and
@@ -317,7 +321,14 @@ Things worth noticing:
   `tracing::error!` and sends only "Internal server error"
   ([error.rs:138-145](../backend/src/error.rs#L138)).
 - Unknown `/api/*` paths hit `api_not_found`
-  ([app.rs:88](../backend/src/app.rs#L88)) so even a 404 is JSON.
+  ([app.rs:138](../backend/src/app.rs#L138)) so even a 404 is JSON.
+- Some errors are produced *outside* our handlers: axum's 405 Method Not
+  Allowed, the timeout layer's 408 and the body-limit layer's 413 arrive with
+  empty or plain-text bodies. A small `from_fn` layer
+  (`json_error_bodies`, [app.rs:99](../backend/src/app.rs#L99)) rewrites those
+  three statuses on `/api/*` into the standard JSON shape
+  (`method_not_allowed`, `request_timeout`, `payload_too_large`) and keeps the
+  status. It sits just above the timeout layer so it sees the 408 too.
 - The error body type is the shared `ApiError`, so each frontend decodes it
   with the same shape: React in `parseError`
   ([client.ts:43](../frontend-react/src/api/client.ts#L43)), Leptos in
@@ -400,7 +411,7 @@ What this does *not* give you: rate limiting on login, or protection if you
 ever add a state-changing `GET`, or a form-encoded endpoint. There is no CSRF
 token; add one before changing either assumption.
 
-`X-Frame-Options: DENY` ([app.rs:77](../backend/src/app.rs#L77)) stops the app
+`X-Frame-Options: DENY` ([app.rs:84](../backend/src/app.rs#L84)) stops the app
 being framed (clickjacking).
 
 ## Transactions and races
@@ -422,7 +433,10 @@ default `BEGIN` is *deferred*: the write lock is taken at the first write, so
 another request's insert could slip in between our reads and our write.
 `BEGIN IMMEDIATE` takes the write lock first. The second concurrent borrow
 waits (up to `busy_timeout`) for the first to commit, then runs its checks
-against the updated data, and sees `NoCopiesAvailable`. The same technique
+against the updated data, and sees `NoCopiesAvailable`. The test
+`concurrent_borrows_never_exceed_total_copies`
+([tests/loans.rs:372](../backend/tests/loans.rs#372)) races 8 borrows for a
+2-copy book through one file-backed database to prove it. The same technique
 protects:
 
 - `mark_returned` ([loans/sqlite.rs:222](../backend/src/loans/sqlite.rs#L222)): "returning twice" cannot both succeed;
@@ -450,7 +464,7 @@ seconds ([clock.rs:20](../backend/src/clock.rs#L20)) so in-memory comparisons
 | Service rules | [loans/service.rs:133](../backend/src/loans/service.rs#L133) | The service runs against `FakeLoanRepository`, an in-memory implementation of the trait, plus `FixedClock`. No database. This is what the port buys you |
 | Time | [clock.rs:37](../backend/src/clock.rs#L37) `FixedClock` | `set` / `advance` make "14 days later" and the overdue boundary (`due_at == now` is *not* overdue) deterministic |
 | Whole HTTP stack | [backend/tests/](../backend/tests/) (`auth`, `books`, `members`, `loans`, `health`, `middleware`) | `#[sqlx::test]` gives each test a fresh, already-migrated SQLite database; the test builds the **real router** with `build_router` and sends requests with `tower::ServiceExt::oneshot` (no sockets). Helpers in [tests/common/mod.rs](../backend/tests/common/mod.rs): `TestApp`, `login()`, JSON request helpers |
-| Middleware and SPA serving | [tests/middleware.rs](../backend/tests/middleware.rs) | security headers, request-id propagation, 413 body limit, SPA fallback vs. JSON 404 |
+| Middleware and SPA serving | [tests/middleware.rs](../backend/tests/middleware.rs) | security headers, request-id propagation, 413 body limit, JSON 405/413 bodies, SPA fallback vs. JSON 404 |
 | DB mapping | [db.rs:129](../backend/src/db.rs#L129) | a UNIQUE violation becomes `RepoError::Conflict` with the constraint name |
 | React | `frontend-react/src/**/*.test.tsx` | Vitest + Testing Library: client, route guard, forms, pagination, search debounce |
 | Leptos | `#[cfg(test)]` in `frontend-leptos/src` | Only pure logic (URL parsing, redirect target, API error decoding); the UI itself is not unit-tested |
@@ -460,10 +474,12 @@ Every endpoint has a happy-path test and a test per documented error status.
 `#[sqlx::test]` creates throwaway databases under `target/sqlx/` (which is why
 `.gitignore` ignores `target/` at any depth).
 
-Known gap: the atomicity guarantee is reasoned about and covered by sequential
-tests of each rule (for example `no_free_copy_is_409`,
-[tests/loans.rs:160](../backend/tests/loans.rs#L160)), but no test fires
-truly concurrent borrows at the same book.
+The atomicity guarantee is covered twice: by sequential tests of each rule (for
+example `no_free_copy_is_409`, [tests/loans.rs:160](../backend/tests/loans.rs#L160)),
+and by a concurrent one, `concurrent_borrows_never_exceed_total_copies`
+([tests/loans.rs:372](../backend/tests/loans.rs#372)), which fires 8 simultaneous borrows
+at a book with 2 copies and asserts exactly 2 succeed, the rest get 409
+`no_copies_available`, and the database holds exactly 2 active loans.
 
 CI ([.github/workflows/ci.yml](../.github/workflows/ci.yml)) runs formatting,
 clippy with warnings denied, all tests, an offline build, the generated-types
@@ -488,7 +504,7 @@ is why handlers can return `Result<T, AppError>`.
 
 **`State` and `FromRef`.** Shared application data (the DB pool, services,
 config) is put in one `AppState` and attached with `Router::with_state`
-([app.rs:49](../backend/src/app.rs#L49)). `#[derive(FromRef)]`
+([app.rs:54](../backend/src/app.rs#L54)). `#[derive(FromRef)]`
 ([state.rs:21](../backend/src/state.rs#L21)) generates "get field X out of the
 state", so a handler can write `State(loans): State<LoanService>` instead of
 taking the whole state. The `AuthUser` extractor uses `AuthService: FromRef<S>`
@@ -526,12 +542,12 @@ on it stalls. CPU-heavy or blocking work (Argon2) is handed to a separate pool
 
 **Tower layers.** Middleware in axum is a `tower` `Layer` wrapping a `Service`.
 `ServiceBuilder` composes them, listed outermost-first
-([app.rs:52](../backend/src/app.rs#L52)): request id, tracing, timeout,
-compression, headers, body limit.
+([app.rs:57](../backend/src/app.rs#L57)): request id, tracing, JSON error
+bodies, timeout, compression, headers, body limit.
 
 **Router composition.** `Router::merge` combines routers, `nest("/api", …)`
 adds a prefix, `fallback` / `fallback_service` handle everything unmatched
-([app.rs:31-45](../backend/src/app.rs#L31)). `ServeDir` plus `ServeFile` serve
+([app.rs:36-50](../backend/src/app.rs#L36)). `ServeDir` plus `ServeFile` serve
 the React/Leptos build with the SPA `index.html` fallback.
 
 **Compile-time checked SQL.** `sqlx::query!` verifies the SQL and the column

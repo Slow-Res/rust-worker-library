@@ -203,3 +203,6 @@ Dockerfile, Makefile, .github/workflows/ci.yml
 Rate limiting on login, roles and permissions, password reset, email
 notifications, fines, reservations, full-text search (SQLite FTS5),
 server-side rendering / Leptos server functions, i18n.
+
+Known limitation: search is case-insensitive for ASCII letters only (SQLite's
+`LIKE`), so `é` does not match `É`.

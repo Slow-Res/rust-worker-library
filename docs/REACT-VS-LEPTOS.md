@@ -136,10 +136,10 @@ if (user === null) {
 return <Outlet />
 ```
 
-Leptos ([auth.rs:77-114](../frontend-leptos/src/auth.rs#L77)) builds a reactive
+Leptos ([auth.rs:100-137](../frontend-leptos/src/auth.rs#L100)) builds a reactive
 `move ||` block that re-runs when `auth.ready` / `auth.user` change, reads the
 location with `get_untracked`, and renders `<Redirect>`; the pure helper
-`login_redirect_target` ([auth.rs:63](../frontend-leptos/src/auth.rs#L63)) is
+`login_redirect_target` ([auth.rs:86](../frontend-leptos/src/auth.rs#L86)) is
 unit tested.
 
 A global "any 401 means the session is gone" rule exists in both:
@@ -147,14 +147,17 @@ React in [queryClient.ts:15](../frontend-react/src/queryClient.ts#L15)
 (a `QueryCache`/`MutationCache` `onError` that clears the user and navigates);
 Leptos in `notify_unauthorized` ([api/mod.rs:90](../frontend-leptos/src/api/mod.rs#L90))
 calling the handler registered by `AuthProvider`
-([auth.rs:48](../frontend-leptos/src/auth.rs#L48)). Login and `me` are
-exempt in both, because a 401 there is a normal answer.
+([auth.rs:54](../frontend-leptos/src/auth.rs#L54)), which clears the user and,
+like React, navigates to `/login?next=<current path>` (also from public pages;
+when a `RequireAuth` guard is mounted it does the redirect itself, so the
+handler skips it to avoid redirecting twice). Login and `me` are exempt in
+both, because a 401 there is a normal answer.
 
 Logout is the same story in a different shape. React clears the whole query
 cache and navigates ([components/Layout.tsx:12](../frontend-react/src/components/Layout.tsx#L12)).
 Leptos has to coordinate with the mounted guard
 ([components/layout.rs:16-27](../frontend-leptos/src/components/layout.rs#L16),
-[auth.rs:100](../frontend-leptos/src/auth.rs#L100)), see gotcha c.
+[auth.rs:123](../frontend-leptos/src/auth.rs#L123)), see gotcha c.
 
 ### Error handling
 
@@ -274,11 +277,11 @@ Chrome hung). The fix has two parts:
 
 - read the location with **`get_untracked`** so the guard captures "where the
   user was" exactly once, when they lost access
-  ([auth.rs:106-109](../frontend-leptos/src/auth.rs#L106) and the comment above it);
+  ([auth.rs:129-132](../frontend-leptos/src/auth.rs#L129) and the comment above it);
 - build the target in a pure function, `login_redirect_target`
-  ([auth.rs:63](../frontend-leptos/src/auth.rs#L63)), which refuses to nest a
+  ([auth.rs:86](../frontend-leptos/src/auth.rs#L86)), which refuses to nest a
   `/login` URL and re-adds the `?` that Leptos's `location.search` leaves out.
-  It has unit tests ([auth.rs:121-135](../frontend-leptos/src/auth.rs#L121)).
+  It has unit tests ([auth.rs:143-158](../frontend-leptos/src/auth.rs#L143)).
 
 React contrast: `<Navigate>` is rendered once and runs its redirect in an
 effect; after it navigates, `RequireAuth` is unmounted because the `/login`
@@ -300,9 +303,9 @@ guard is actually mounted) before clearing the user; the guard sees the flag,
 renders nothing, resets it, and does not redirect
 ([layout.rs:16-27](../frontend-leptos/src/components/layout.rs#L16),
 [auth.rs:21-25](../frontend-leptos/src/auth.rs#L21),
-[auth.rs:100-104](../frontend-leptos/src/auth.rs#L100)). The guard also resets
+[auth.rs:123-127](../frontend-leptos/src/auth.rs#L123)). The guard also resets
 the flag in `on_cleanup` so it can never get stuck
-([auth.rs:83-86](../frontend-leptos/src/auth.rs#L83)). Verified by recording
+([auth.rs:105-109](../frontend-leptos/src/auth.rs#L105)). Verified by recording
 `history.pushState` calls: logout produces exactly one, to `/books`.
 
 React contrast: [Layout.tsx:12-20](../frontend-react/src/components/Layout.tsx#L12)
