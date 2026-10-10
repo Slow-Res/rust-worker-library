@@ -5,7 +5,7 @@
 mod common;
 
 use axum::http::StatusCode;
-use common::TestApp;
+use common::{TestApp, insert_loan};
 use serde_json::{Value, json};
 use sqlx::SqlitePool;
 
@@ -17,32 +17,6 @@ async fn create(app: &TestApp, cookie: &str, body: Value) -> Value {
     let (status, _, json) = app.post_json("/api/members", &body, Some(cookie)).await;
     assert_eq!(status, StatusCode::CREATED, "{json}");
     json
-}
-
-/// Insert a book and a loan for `member_id` straight into the database (the
-/// loans API is a later feature).
-async fn insert_loan(pool: &SqlitePool, member_id: i64, returned: bool) {
-    let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM books")
-        .fetch_one(pool)
-        .await
-        .unwrap();
-    let book_id = sqlx::query(
-        "INSERT INTO books (title, author, total_copies, created_at, updated_at) VALUES (?, 'A', 5, 0, 0)",
-    )
-    .bind(format!("Book {n}"))
-    .execute(pool)
-    .await
-    .unwrap()
-    .last_insert_rowid();
-    sqlx::query(
-        "INSERT INTO loans (book_id, member_id, borrowed_at, due_at, returned_at) VALUES (?, ?, 0, 100, ?)",
-    )
-    .bind(book_id)
-    .bind(member_id)
-    .bind(returned.then_some(50))
-    .execute(pool)
-    .await
-    .unwrap();
 }
 
 fn names(page: &Value) -> Vec<&str> {

@@ -154,3 +154,29 @@ fn test_config() -> Config {
         log_format: LogFormat::Pretty,
     }
 }
+
+/// Insert a fresh book and a loan of it for `member_id` straight into the
+/// database, bypassing the API (handy for setting up loan counts).
+pub async fn insert_loan(pool: &SqlitePool, member_id: i64, returned: bool) {
+    let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM books")
+        .fetch_one(pool)
+        .await
+        .unwrap();
+    let book_id = sqlx::query(
+        "INSERT INTO books (title, author, total_copies, created_at, updated_at) VALUES (?, 'A', 5, 0, 0)",
+    )
+    .bind(format!("Book {n}"))
+    .execute(pool)
+    .await
+    .unwrap()
+    .last_insert_rowid();
+    sqlx::query(
+        "INSERT INTO loans (book_id, member_id, borrowed_at, due_at, returned_at) VALUES (?, ?, 0, 100, ?)",
+    )
+    .bind(book_id)
+    .bind(member_id)
+    .bind(returned.then_some(50))
+    .execute(pool)
+    .await
+    .unwrap();
+}
