@@ -102,12 +102,23 @@ pub fn Books() -> impl IntoView {
             <SearchBox value=q on_change=on_search placeholder="Search title, author or ISBN"/>
             <select
                 aria-label="Availability"
-                prop:value=move || availability_param(availability.get())
                 on:change=on_filter
             >
-                <option value="">"All"</option>
-                <option value="available">"Available"</option>
-                <option value="on_loan">"On loan"</option>
+                // `selected` on each option (not `prop:value` on the select):
+                // props are applied before children exist, so a value set on
+                // the <select> is ignored on first render.
+                <option value="" selected=move || availability.get() == Availability::All>
+                    "All"
+                </option>
+                <option
+                    value="available"
+                    selected=move || availability.get() == Availability::Available
+                >
+                    "Available"
+                </option>
+                <option value="on_loan" selected=move || availability.get() == Availability::OnLoan>
+                    "On loan"
+                </option>
             </select>
             <Show when=move || auth.user.get().is_some()>
                 <a href="/books/new" role="button">
