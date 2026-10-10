@@ -2,8 +2,12 @@
 
 use std::time::Duration;
 
+use axum::Json;
 use axum::Router;
+use axum::extract::Request;
 use axum::http::{HeaderName, HeaderValue, StatusCode, header};
+use axum::middleware::{Next, from_fn};
+use axum::response::{IntoResponse, Response};
 use tower::ServiceBuilder;
 use tower_http::compression::CompressionLayer;
 use tower_http::limit::RequestBodyLimitLayer;
@@ -20,6 +24,7 @@ use crate::health;
 use crate::loans;
 use crate::members;
 use crate::state::AppState;
+use library_shared::{ApiError, ApiErrorBody};
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 const BODY_LIMIT_BYTES: usize = 64 * 1024;
@@ -68,6 +73,8 @@ pub fn build_router(state: AppState) -> Router {
                     )
                 }),
             )
+            // Sits above the timeout layer so it also sees the 408 it produces.
+            .layer(from_fn(json_error_bodies))
             .layer(TimeoutLayer::with_status_code(
                 StatusCode::REQUEST_TIMEOUT,
                 REQUEST_TIMEOUT,
@@ -84,7 +91,86 @@ fn security_header(name: HeaderName, value: &'static str) -> SetResponseHeaderLa
     SetResponseHeaderLayer::if_not_present(name, HeaderValue::from_static(value))
 }
 
+/// The 405 (axum), 408 (timeout layer) and 413 (body-limit layer) responses are
+/// produced outside our handlers with empty or plain-text bodies. Rewrite them
+/// for `/api/*` so every API error has the JSON shape of spec §5.5. The status
+/// is kept. `from_fn` wraps the rest of the stack in an async function: it can
+/// look at the request, call `next.run(request)`, then adjust the response.
+async fn json_error_bodies(request: Request, next: Next) -> Response {
+    let is_api = request.uri().path().starts_with("/api/");
+    let response = next.run(request).await;
+    if !is_api {
+        return response;
+    }
+    let is_json = response
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.starts_with("application/json"));
+    match error_for_status(response.status()) {
+        Some((code, message)) if !is_json => json_error(response.status(), code, message),
+        _ => response,
+    }
+}
+
+/// `(code, message)` for the statuses that [`json_error_bodies`] rewrites.
+fn error_for_status(status: StatusCode) -> Option<(&'static str, &'static str)> {
+    match status {
+        StatusCode::METHOD_NOT_ALLOWED => Some(("method_not_allowed", "method not allowed")),
+        StatusCode::REQUEST_TIMEOUT => Some(("request_timeout", "request timed out")),
+        StatusCode::PAYLOAD_TOO_LARGE => Some(("payload_too_large", "request body too large")),
+        _ => None,
+    }
+}
+
+fn json_error(status: StatusCode, code: &str, message: &str) -> Response {
+    let body = ApiError {
+        error: ApiErrorBody {
+            code: code.to_owned(),
+            message: message.to_owned(),
+            fields: None,
+        },
+    };
+    (status, Json(body)).into_response()
+}
+
 /// JSON 404 for any `/api/*` path that matches no route.
 async fn api_not_found() -> AppError {
     AppError::NotFound("route")
+}
+
+#[cfg(test)]
+mod tests {
+    use axum::body::Body;
+    use http_body_util::BodyExt;
+
+    use super::*;
+
+    /// Run `json_error_bodies` around a service that always answers `status`
+    /// with an empty body, like the timeout layer does.
+    async fn through_mapper(path: &str, status: StatusCode) -> Response {
+        let app = Router::new()
+            .fallback(move || async move { status })
+            .layer(from_fn(json_error_bodies));
+        let request = Request::builder().uri(path).body(Body::empty()).unwrap();
+        tower::ServiceExt::oneshot(app, request).await.unwrap()
+    }
+
+    #[tokio::test]
+    async fn timeout_response_becomes_json() {
+        let response = through_mapper("/api/books", StatusCode::REQUEST_TIMEOUT).await;
+        assert_eq!(response.status(), StatusCode::REQUEST_TIMEOUT);
+        assert_eq!(response.headers()[header::CONTENT_TYPE], "application/json");
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(body["error"]["code"], "request_timeout");
+    }
+
+    #[tokio::test]
+    async fn non_api_paths_and_other_statuses_are_left_alone() {
+        let response = through_mapper("/books", StatusCode::REQUEST_TIMEOUT).await;
+        assert!(response.headers().get(header::CONTENT_TYPE).is_none());
+        let response = through_mapper("/api/books", StatusCode::BAD_GATEWAY).await;
+        assert!(response.headers().get(header::CONTENT_TYPE).is_none());
+    }
 }

@@ -7,6 +7,7 @@ mod common;
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode, header};
 use common::TestApp;
+use http_body_util::BodyExt;
 use sqlx::SqlitePool;
 use tower::ServiceExt;
 
@@ -54,6 +55,20 @@ async fn declared_body_over_64_kib_is_rejected_with_413(pool: SqlitePool) {
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    assert_eq!(response.headers()[header::CONTENT_TYPE], "application/json");
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(json["error"]["code"], "payload_too_large");
+}
+
+#[sqlx::test]
+async fn wrong_method_is_a_json_405(pool: SqlitePool) {
+    let app = TestApp::new(pool);
+    let (status, headers, json) = app.delete("/api/health", None).await;
+    assert_eq!(status, StatusCode::METHOD_NOT_ALLOWED);
+    assert_eq!(headers[header::CONTENT_TYPE], "application/json");
+    assert!(headers.contains_key(header::ALLOW));
+    assert_eq!(json["error"]["code"], "method_not_allowed");
 }
 
 #[sqlx::test]

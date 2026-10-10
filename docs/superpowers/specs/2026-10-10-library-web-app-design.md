@@ -221,6 +221,9 @@ CREATE INDEX idx_loans_active_due    ON loans(due_at)    WHERE returned_at IS NU
 | `Unauthorized` | 401 | `unauthorized` |
 | `NotFound(&'static str)` | 404 | `not_found` (message: "<entity> not found") |
 | `Conflict { code: &'static str, message: String }` | 409 | the given code |
+| (no variant; response-mapping layer in `app.rs`) | 405 | `method_not_allowed` |
+| (no variant; response-mapping layer in `app.rs`) | 408 | `request_timeout` (from the timeout layer) |
+| (no variant; response-mapping layer in `app.rs`) | 413 | `payload_too_large` (from the body-limit layer) |
 | `Internal(anyhow::Error)` | 500 | `internal` (message is generic; real error logged with `tracing::error!`, never sent to client) |
 
 Response body (always JSON, matches `shared::ApiError`):
