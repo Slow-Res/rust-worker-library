@@ -9,6 +9,7 @@ import { ErrorMessage } from '../components/ErrorMessage'
 import { Picker, type PickerOption } from '../components/Picker'
 import type { BookQuery } from '../generated/BookQuery'
 import type { MemberQuery } from '../generated/MemberQuery'
+import { usePickerSelection } from '../hooks/usePickerSelection'
 import { parsePositiveInt } from '../utils'
 
 /** Search results, plus the pre-selected record when it is not among them. */
@@ -22,8 +23,10 @@ export function NewLoanPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
-  const [bookId, setBookId] = useState(() => parsePositiveInt(searchParams.get('book_id')))
-  const [memberId, setMemberId] = useState(() => parsePositiveInt(searchParams.get('member_id')))
+  const bookSelection = usePickerSelection(parsePositiveInt(searchParams.get('book_id')))
+  const memberSelection = usePickerSelection(parsePositiveInt(searchParams.get('member_id')))
+  const bookId = bookSelection.id
+  const memberId = memberSelection.id
   const [bookSearch, setBookSearch] = useState('')
   const [memberSearch, setMemberSearch] = useState('')
 
@@ -46,11 +49,18 @@ export function NewLoanPage() {
 
   const bookOptions = withSelected(
     (books.data?.items ?? []).map((book) => ({ id: book.id, label: `${book.title} — ${book.author}` })),
-    prefilledBook.data && { id: prefilledBook.data.id, label: `${prefilledBook.data.title} — ${prefilledBook.data.author}` },
+    bookSelection.selected(
+      prefilledBook.data && { id: prefilledBook.data.id, label: `${prefilledBook.data.title} — ${prefilledBook.data.author}` },
+    ),
   )
   const memberOptions = withSelected(
     (members.data?.items ?? []).map((member) => ({ id: member.id, label: `${member.name} (${member.email})` })),
-    prefilledMember.data && { id: prefilledMember.data.id, label: `${prefilledMember.data.name} (${prefilledMember.data.email})` },
+    memberSelection.selected(
+      prefilledMember.data && {
+        id: prefilledMember.data.id,
+        label: `${prefilledMember.data.name} (${prefilledMember.data.email})`,
+      },
+    ),
   )
 
   const lend = useMutation({
@@ -66,8 +76,8 @@ export function NewLoanPage() {
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault()
-    // Unselected pickers are sent as 0 so the server answers with its usual field errors.
-    lend.mutate({ book_id: bookId ?? 0, member_id: memberId ?? 0 })
+    if (bookId === null || memberId === null) return
+    lend.mutate({ book_id: bookId, member_id: memberId })
   }
 
   return (
@@ -80,7 +90,7 @@ export function NewLoanPage() {
           onSearch={setBookSearch}
           options={bookOptions}
           selectedId={bookId}
-          onSelect={setBookId}
+          onSelect={(id) => bookSelection.select(id, bookOptions)}
           isLoading={books.isFetching}
           error={fields.book_id}
         />
@@ -90,13 +100,13 @@ export function NewLoanPage() {
           onSearch={setMemberSearch}
           options={memberOptions}
           selectedId={memberId}
-          onSelect={setMemberId}
+          onSelect={(id) => memberSelection.select(id, memberOptions)}
           isLoading={members.isFetching}
           error={fields.member_id}
         />
         <ErrorMessage error={books.error ?? members.error} />
         {isGeneralError(lend.error) && <ErrorMessage error={lend.error} />}
-        <button type="submit" disabled={lend.isPending}>
+        <button type="submit" disabled={lend.isPending || bookId === null || memberId === null}>
           Lend book
         </button>
       </form>
