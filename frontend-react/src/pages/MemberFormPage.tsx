@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router'
 import { ApiRequestError } from '../api/client'
 import { memberKey, createMember, getMember, updateMember } from '../api/members'
+import { invalidateLibraryData } from '../api/invalidate'
 import { MemberForm } from '../components/MemberForm'
 import { ErrorMessage } from '../components/ErrorMessage'
 import type { MemberInput } from '../generated/MemberInput'
@@ -28,7 +29,7 @@ function MemberFormView({ id }: { id?: number }) {
   const save = useMutation({
     mutationFn: (input: MemberInput) => (id === undefined ? createMember(input) : updateMember(id, input)),
     onSuccess: async () => {
-      await Promise.all(['members', 'member', 'loans'].map((key) => queryClient.invalidateQueries({ queryKey: [key] })))
+      await invalidateLibraryData(queryClient, 'members', 'member', 'loans')
       void navigate('/members')
     },
   })

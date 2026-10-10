@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router'
 import { ApiRequestError } from '../api/client'
 import { bookKey, createBook, getBook, updateBook } from '../api/books'
+import { invalidateLibraryData } from '../api/invalidate'
 import { BookForm } from '../components/BookForm'
 import { ErrorMessage } from '../components/ErrorMessage'
 import type { BookInput } from '../generated/BookInput'
@@ -28,7 +29,7 @@ function BookFormView({ id }: { id?: number }) {
   const save = useMutation({
     mutationFn: (input: BookInput) => (id === undefined ? createBook(input) : updateBook(id, input)),
     onSuccess: async () => {
-      await Promise.all(['books', 'book', 'loans'].map((key) => queryClient.invalidateQueries({ queryKey: [key] })))
+      await invalidateLibraryData(queryClient, 'books', 'book', 'loans')
       void navigate('/books')
     },
   })

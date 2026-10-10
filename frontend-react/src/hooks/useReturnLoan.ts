@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { returnLoan } from '../api/loans'
+import { invalidateLibraryData } from '../api/invalidate'
 
 /** Returning a loan changes availability and member loan counts too. */
 export function useReturnLoan() {
@@ -7,9 +8,7 @@ export function useReturnLoan() {
   return useMutation({
     mutationFn: returnLoan,
     onSuccess: async () => {
-      await Promise.all(
-        ['loans', 'books', 'book', 'members', 'member'].map((key) => queryClient.invalidateQueries({ queryKey: [key] })),
-      )
+      await invalidateLibraryData(queryClient, 'loans', 'books', 'book', 'members', 'member')
     },
   })
 }

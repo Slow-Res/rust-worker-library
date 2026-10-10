@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router'
 import { deleteMember, listMembers, membersKey } from '../api/members'
+import { invalidateLibraryData } from '../api/invalidate'
 import { ErrorMessage } from '../components/ErrorMessage'
 import { Pagination } from '../components/Pagination'
 import { SearchBox } from '../components/SearchBox'
@@ -19,9 +20,7 @@ export function MembersPage() {
   const remove = useMutation({
     mutationFn: deleteMember,
     onSuccess: async () => {
-      await Promise.all(
-        ['members', 'member', 'loans', 'books', 'book'].map((key) => queryClient.invalidateQueries({ queryKey: [key] })),
-      )
+      await invalidateLibraryData(queryClient, 'members', 'member', 'loans', 'books', 'book')
     },
   })
 
