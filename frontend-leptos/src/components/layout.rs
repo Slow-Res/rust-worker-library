@@ -1,5 +1,6 @@
 //! Top navigation bar and page container.
 
+use gloo_timers::future::TimeoutFuture;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos_router::components::A;
@@ -21,6 +22,9 @@ pub fn Layout(children: Children) -> impl IntoView {
             // Navigate first: clearing the user while still on a protected
             // page would make `RequireAuth` redirect to /login before we leave.
             navigate("/books", Default::default());
+            // The router swaps routes asynchronously; yield to the event loop
+            // so `RequireAuth` is unmounted before the user disappears.
+            TimeoutFuture::new(0).await;
             auth.user.set(None);
         });
     };

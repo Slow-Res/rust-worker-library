@@ -70,7 +70,12 @@ pub fn RequireAuth() -> impl IntoView {
             } else if auth.user.get().is_some() {
                 view! { <Outlet/> }.into_any()
             } else {
-                let here = format!("{}{}", location.pathname.get_untracked(), location.search.get_untracked());
+                // Leptos' `search` has no leading `?`; add it back when non-empty.
+                let search = location.search.get_untracked();
+                let here = match search.is_empty() {
+                    true => location.pathname.get_untracked(),
+                    false => format!("{}?{search}", location.pathname.get_untracked()),
+                };
                 let to = build_url("/login", &[("next", &here)]);
                 view! { <leptos_router::components::Redirect path=to/> }.into_any()
             }
