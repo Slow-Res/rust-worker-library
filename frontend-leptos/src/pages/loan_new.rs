@@ -267,7 +267,7 @@ fn Picker(
                 more.get()
                     .map(|(shown, total)| {
                         view! {
-                            <small>
+                            <small aria-live="polite">
                                 {format!("Showing the first {shown} of {total} — type to narrow the search")}
                             </small>
                         }
