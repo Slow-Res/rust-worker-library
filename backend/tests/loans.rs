@@ -184,8 +184,10 @@ async fn sixth_active_loan_is_409(pool: SqlitePool) {
     for n in 1..=6 {
         books.push(add_book(&app, &cookie, &format!("Book {n}"), 1).await);
     }
+    let mut loan_ids = Vec::new();
     for &book in &books[..5] {
-        borrow(&app, &cookie, book, member).await;
+        let loan = borrow(&app, &cookie, book, member).await;
+        loan_ids.push(loan["id"].as_i64().unwrap());
     }
 
     let body = json!({ "book_id": books[5], "member_id": member });
@@ -198,7 +200,7 @@ async fn sixth_active_loan_is_409(pool: SqlitePool) {
     );
 
     // Returning one frees a slot.
-    give_back(&app, &cookie, 1).await;
+    give_back(&app, &cookie, loan_ids[0]).await;
     borrow(&app, &cookie, books[5], member).await;
 }
 

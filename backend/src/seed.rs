@@ -6,10 +6,11 @@
 
 use anyhow::{Context, bail};
 use chrono::{DateTime, Datelike, Duration, Utc};
-use library_shared::{BookInput, MemberInput};
+use library_shared::{Availability, BookInput, MemberInput};
 use sqlx::SqlitePool;
 
 use crate::books::{BookFields, BookFilter, BookRepository, SqliteBookRepository};
+use crate::error::FieldErrors;
 use crate::loans::{
     CreateLoanOutcome, LOAN_PERIOD_DAYS, LoanRepository, MAX_ACTIVE_LOANS_PER_MEMBER,
     NewLoanRecord, SqliteLoanRepository,
@@ -101,7 +102,10 @@ pub enum SeedReport {
 }
 
 /// Insert the sample data if (and only if) there are no books and no members.
-/// Running it again is therefore a no-op. `now` is passed in (rather than read
+/// Running it again is therefore a no-op.
+///
+/// Seeding is not atomic: if it fails part-way, the rows inserted so far stay
+/// and a re-run will skip. To reset, delete the database file and run again. `now` is passed in (rather than read
 /// from the system) so the loan dates are testable.
 pub async fn seed(pool: &SqlitePool, now: DateTime<Utc>) -> anyhow::Result<SeedReport> {
     let books = SqliteBookRepository::new(pool.clone());
@@ -113,7 +117,7 @@ pub async fn seed(pool: &SqlitePool, now: DateTime<Utc>) -> anyhow::Result<SeedR
         .list(
             &BookFilter {
                 q: None,
-                availability: library_shared::Availability::All,
+                availability: Availability::All,
             },
             one,
         )
@@ -132,8 +136,9 @@ pub async fn seed(pool: &SqlitePool, now: DateTime<Utc>) -> anyhow::Result<SeedR
             published_year: Some(year),
             total_copies: copies,
         };
-        let fields = BookFields::parse(input, now.year())
-            .map_err(|errors| anyhow::anyhow!("invalid seed book `{title}`: {errors:?}"))?;
+        let fields = BookFields::parse(input, now.year()).map_err(|errors| {
+            anyhow::anyhow!("invalid seed book `{title}`: {}", readable(&errors))
+        })?;
         book_ids.push(books.create(&fields, now).await?.id);
     }
 
@@ -143,8 +148,9 @@ pub async fn seed(pool: &SqlitePool, now: DateTime<Utc>) -> anyhow::Result<SeedR
             name: name.to_owned(),
             email: email.to_owned(),
         };
-        let fields = MemberFields::parse(input)
-            .map_err(|errors| anyhow::anyhow!("invalid seed member `{name}`: {errors:?}"))?;
+        let fields = MemberFields::parse(input).map_err(|errors| {
+            anyhow::anyhow!("invalid seed member `{name}`: {}", readable(&errors))
+        })?;
         member_ids.push(members.create(&fields, now).await?.id);
     }
 
@@ -174,6 +180,15 @@ pub async fn seed(pool: &SqlitePool, now: DateTime<Utc>) -> anyhow::Result<SeedR
         members: member_ids.len(),
         loans: LOANS.len(),
     })
+}
+
+/// `field message; field message`, for error output.
+fn readable(errors: &FieldErrors) -> String {
+    errors
+        .iter()
+        .map(|(field, message)| format!("{field} {message}"))
+        .collect::<Vec<_>>()
+        .join("; ")
 }
 
 #[cfg(test)]

@@ -79,6 +79,8 @@ impl From<RepoError> for AppError {
     }
 }
 
+// Every extractor rejection maps to 400 `bad_request` (spec §5.5). An oversized
+// body is rejected earlier with 413 by the body-limit layer, before extraction.
 impl From<JsonRejection> for AppError {
     fn from(rejection: JsonRejection) -> Self {
         Self::BadRequest(rejection.body_text())

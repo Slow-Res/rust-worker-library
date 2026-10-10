@@ -40,7 +40,7 @@ pub async fn create_user(
     let result = auth.create_user(username, &password).await;
     pool.close().await;
     // `AppError`'s message is user-facing for validation and conflict errors.
-    let user = result.map_err(|err| anyhow::anyhow!("{}", describe(&err)))?;
+    let user = result.map_err(|err| describe(&err))?;
     println!("Created user `{}` (id {})", user.username, user.id);
     Ok(())
 }
@@ -62,14 +62,21 @@ pub async fn seed(config: Config) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn describe(err: &AppError) -> String {
+/// Turn a service error into one `main` can print. Internal errors keep their
+/// cause chain (`{:#}` joins it with `: `) because `AppError::Internal`'s own
+/// message is only "internal error".
+fn describe(err: &AppError) -> anyhow::Error {
     match err {
-        AppError::Validation(fields) => fields
-            .iter()
-            .map(|(field, message)| format!("{field} {message}"))
-            .collect::<Vec<_>>()
-            .join("; "),
-        other => other.to_string(),
+        AppError::Validation(fields) => anyhow::anyhow!(
+            "{}",
+            fields
+                .iter()
+                .map(|(field, message)| format!("{field} {message}"))
+                .collect::<Vec<_>>()
+                .join("; ")
+        ),
+        AppError::Internal(source) => anyhow::anyhow!("internal error: {source:#}"),
+        other => anyhow::anyhow!("{other}"),
     }
 }
 

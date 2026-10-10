@@ -118,6 +118,13 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn escape_like_escapes_wildcards_and_backslash() {
+        assert_eq!(escape_like("100%_done\\"), "100\\%\\_done\\\\");
+        assert_eq!(escape_like("plain text"), "plain text");
+        assert_eq!(escape_like(""), "");
+    }
+
     #[sqlx::test]
     async fn unique_violation_maps_to_conflict(pool: SqlitePool) {
         let insert =
