@@ -6,10 +6,11 @@ use std::sync::Arc;
 use anyhow::{Context, bail};
 
 use crate::auth::{AuthService, SqliteAuthRepository};
-use crate::clock::SystemClock;
+use crate::clock::{Clock, SystemClock};
 use crate::config::Config;
 use crate::db;
 use crate::error::AppError;
+use crate::seed::{self, SeedReport};
 
 /// `create-user`: add a librarian account to the database.
 ///
@@ -41,6 +42,23 @@ pub async fn create_user(
     // `AppError`'s message is user-facing for validation and conflict errors.
     let user = result.map_err(|err| anyhow::anyhow!("{}", describe(&err)))?;
     println!("Created user `{}` (id {})", user.username, user.id);
+    Ok(())
+}
+
+/// `seed`: fill an empty database with sample books, members and loans.
+pub async fn seed(config: Config) -> anyhow::Result<()> {
+    let pool = db::connect(&config).await?;
+    db::migrate(&pool).await?;
+    let result = seed::seed(&pool, SystemClock.now()).await;
+    pool.close().await;
+    match result? {
+        SeedReport::Seeded {
+            books,
+            members,
+            loans,
+        } => println!("Seeded {books} books, {members} members and {loans} loans"),
+        SeedReport::Skipped => println!("database already has data; skipping"),
+    }
     Ok(())
 }
 

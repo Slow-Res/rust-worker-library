@@ -17,6 +17,7 @@ pub mod health;
 pub mod loans;
 pub mod members;
 pub mod pagination;
+pub mod seed;
 pub mod server;
 pub mod state;
 pub mod telemetry;

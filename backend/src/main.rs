@@ -20,5 +20,6 @@ async fn main() -> anyhow::Result<()> {
             username,
             password_stdin,
         } => commands::create_user(config, &username, password_stdin).await,
+        Command::Seed => commands::seed(config).await,
     }
 }

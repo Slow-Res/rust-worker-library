@@ -26,6 +26,8 @@ pub enum Command {
         #[arg(long)]
         password_stdin: bool,
     },
+    /// Insert sample books, members and loans into an empty database.
+    Seed,
 }
 
 impl Cli {
@@ -60,6 +62,12 @@ mod tests {
                 password_stdin: true
             }
         );
+    }
+
+    #[test]
+    fn seed_subcommand() {
+        let cli = Cli::parse_from(["library-backend", "seed"]);
+        assert_eq!(cli.command(), Command::Seed);
     }
 
     #[test]
