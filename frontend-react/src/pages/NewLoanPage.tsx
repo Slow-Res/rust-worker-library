@@ -1,0 +1,105 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState, type FormEvent } from 'react'
+import { useNavigate, useSearchParams } from 'react-router'
+import { bookKey, booksKey, getBook, listBooks } from '../api/books'
+import { fieldErrorsOf, isGeneralError } from '../api/client'
+import { createLoan } from '../api/loans'
+import { getMember, listMembers, memberKey, membersKey } from '../api/members'
+import { ErrorMessage } from '../components/ErrorMessage'
+import { Picker, type PickerOption } from '../components/Picker'
+import type { BookQuery } from '../generated/BookQuery'
+import type { MemberQuery } from '../generated/MemberQuery'
+import { parsePositiveInt } from '../utils'
+
+/** Search results, plus the pre-selected record when it is not among them. */
+function withSelected(options: PickerOption[], selected: PickerOption | undefined): PickerOption[] {
+  if (!selected || options.some((option) => option.id === selected.id)) return options
+  return [selected, ...options]
+}
+
+export function NewLoanPage() {
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+
+  const [bookId, setBookId] = useState(() => parsePositiveInt(searchParams.get('book_id')))
+  const [memberId, setMemberId] = useState(() => parsePositiveInt(searchParams.get('member_id')))
+  const [bookSearch, setBookSearch] = useState('')
+  const [memberSearch, setMemberSearch] = useState('')
+
+  const bookQuery: BookQuery = { q: bookSearch, availability: 'available' }
+  const memberQuery: MemberQuery = { q: memberSearch }
+  const books = useQuery({ queryKey: booksKey(bookQuery), queryFn: () => listBooks(bookQuery) })
+  const members = useQuery({ queryKey: membersKey(memberQuery), queryFn: () => listMembers(memberQuery) })
+
+  // Prefilled ids may not appear in the first page of search results, so fetch them directly.
+  const prefilledBook = useQuery({
+    queryKey: bookKey(bookId ?? 0),
+    queryFn: () => getBook(bookId ?? 0),
+    enabled: bookId !== null,
+  })
+  const prefilledMember = useQuery({
+    queryKey: memberKey(memberId ?? 0),
+    queryFn: () => getMember(memberId ?? 0),
+    enabled: memberId !== null,
+  })
+
+  const bookOptions = withSelected(
+    (books.data?.items ?? []).map((book) => ({ id: book.id, label: `${book.title} — ${book.author}` })),
+    prefilledBook.data && { id: prefilledBook.data.id, label: `${prefilledBook.data.title} — ${prefilledBook.data.author}` },
+  )
+  const memberOptions = withSelected(
+    (members.data?.items ?? []).map((member) => ({ id: member.id, label: `${member.name} (${member.email})` })),
+    prefilledMember.data && { id: prefilledMember.data.id, label: `${prefilledMember.data.name} (${prefilledMember.data.email})` },
+  )
+
+  const lend = useMutation({
+    mutationFn: createLoan,
+    onSuccess: async () => {
+      await Promise.all(
+        ['loans', 'books', 'book', 'members', 'member'].map((key) => queryClient.invalidateQueries({ queryKey: [key] })),
+      )
+      void navigate('/loans')
+    },
+  })
+  const fields = fieldErrorsOf(lend.error)
+
+  const handleSubmit = (event: FormEvent) => {
+    event.preventDefault()
+    // Unselected pickers are sent as 0 so the server answers with its usual field errors.
+    lend.mutate({ book_id: bookId ?? 0, member_id: memberId ?? 0 })
+  }
+
+  return (
+    <>
+      <h1>New loan</h1>
+      <form onSubmit={handleSubmit} noValidate>
+        <Picker
+          label="Book"
+          search={bookSearch}
+          onSearch={setBookSearch}
+          options={bookOptions}
+          selectedId={bookId}
+          onSelect={setBookId}
+          isLoading={books.isFetching}
+          error={fields.book_id}
+        />
+        <Picker
+          label="Member"
+          search={memberSearch}
+          onSearch={setMemberSearch}
+          options={memberOptions}
+          selectedId={memberId}
+          onSelect={setMemberId}
+          isLoading={members.isFetching}
+          error={fields.member_id}
+        />
+        <ErrorMessage error={books.error ?? members.error} />
+        {isGeneralError(lend.error) && <ErrorMessage error={lend.error} />}
+        <button type="submit" disabled={lend.isPending}>
+          Lend book
+        </button>
+      </form>
+    </>
+  )
+}
