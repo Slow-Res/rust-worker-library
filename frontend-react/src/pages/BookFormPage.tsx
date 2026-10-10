@@ -6,6 +6,7 @@ import { invalidateLibraryData } from '../api/invalidate'
 import { BookForm } from '../components/BookForm'
 import { ErrorMessage } from '../components/ErrorMessage'
 import type { BookInput } from '../generated/BookInput'
+import { useSettled } from '../hooks/useSettled'
 import { parsePositiveInt } from '../utils'
 import { NotFoundPage } from './NotFoundPage'
 
@@ -34,12 +35,15 @@ function BookFormView({ id }: { id?: number }) {
     },
   })
 
+  // The form copies `existing.data` once on mount, so wait for a fresh (not merely cached) record.
+  const ready = useSettled(id === undefined || (existing.isSuccess && !existing.isFetching))
+
   if (id !== undefined) {
-    if (existing.isPending) return <p aria-busy="true">Loading…</p>
     if (existing.error) {
       const notFound = existing.error instanceof ApiRequestError && existing.error.status === 404
       return notFound ? <NotFoundPage /> : <ErrorMessage error={existing.error} />
     }
+    if (!ready) return <p aria-busy="true">Loading…</p>
   }
 
   return (

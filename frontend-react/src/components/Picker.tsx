@@ -54,7 +54,7 @@ export function Picker({
         ))}
       </select>
       {shown !== undefined && total !== undefined && total > shown ? (
-        <small>
+        <small aria-live="polite">
           Showing the first {shown} of {total} — type to narrow the search
         </small>
       ) : null}
