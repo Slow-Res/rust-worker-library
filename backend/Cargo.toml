@@ -1,0 +1,36 @@
+[package]
+name = "library-backend"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "library_backend"
+path = "src/lib.rs"
+
+[[bin]]
+name = "library-backend"
+path = "src/main.rs"
+
+[dependencies]
+library-shared.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+axum = { version = "0.8", features = ["macros"] }
+tokio = { version = "1", features = ["full"] }
+sqlx = { version = "0.9", features = ["runtime-tokio", "sqlite", "chrono", "migrate", "macros"] }
+tower = { version = "0.5", features = ["util"] }
+tower-http = { version = "0.7", features = ["trace", "fs", "timeout", "request-id", "set-header", "limit", "compression-gzip", "util"] }
+thiserror = "2"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+clap = { version = "4", features = ["derive", "env"] }
+dotenvy = "0.15"
+
+[dev-dependencies]
+http-body-util = "0.1"
+
+[lints]
+workspace = true

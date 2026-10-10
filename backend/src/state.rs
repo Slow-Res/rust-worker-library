@@ -1,0 +1,34 @@
+//! Shared application state handed to every handler.
+
+use std::sync::Arc;
+
+use axum::extract::FromRef;
+use sqlx::SqlitePool;
+
+use crate::clock::Clock;
+use crate::config::Config;
+
+/// Everything handlers need. Feature services (auth, books, ...) are added as
+/// new public fields and built inside [`AppState::new`].
+///
+/// `#[derive(FromRef)]` generates a `FromRef<AppState>` impl for each field,
+/// so a handler can ask for just the piece it needs, e.g.
+/// `State(pool): State<SqlitePool>`, instead of the whole state.
+#[derive(Clone, FromRef)]
+pub struct AppState {
+    pub pool: SqlitePool,
+    pub config: Arc<Config>,
+    /// `Arc<dyn Clock>`: a cheap-to-clone handle to *some* clock, chosen at startup
+    /// (the real one in production, a fixed one in tests).
+    pub clock: Arc<dyn Clock>,
+}
+
+impl AppState {
+    pub fn new(pool: SqlitePool, config: Arc<Config>, clock: Arc<dyn Clock>) -> Self {
+        Self {
+            pool,
+            config,
+            clock,
+        }
+    }
+}
