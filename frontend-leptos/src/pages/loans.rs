@@ -3,14 +3,13 @@
 
 use leptos::prelude::*;
 use leptos::task::spawn_local;
-use leptos_router::NavigateOptions;
 use leptos_router::hooks::{use_navigate, use_query_map};
 use library_shared::{Loan, LoanQuery, LoanStatus};
 
 use crate::api::{self, ApiRequestError};
 use crate::browser::local_date;
 use crate::components::error_message::ErrorMessage;
-use crate::components::pagination::Pagination;
+use crate::components::pagination::{OutOfRange, Pagination};
 use crate::format::loan_status_label;
 use crate::url::{build_url, loan_status_param, page_param, parse_loan_status, parse_page};
 
@@ -48,13 +47,14 @@ pub fn Loans() -> impl IntoView {
                     ("page", &page_param(next)),
                 ],
             ),
-            NavigateOptions {
-                replace: true,
-                ..Default::default()
-            },
+            // Push (not replace) so Back returns to the previous page.
+            Default::default(),
         );
     });
     let on_changed = Callback::new(move |()| version.update(|v| *v += 1));
+    // Lives here (not in `LoansTable`) so a Return error survives the refetch
+    // that replaces the table.
+    let return_error = RwSignal::new(None::<ApiRequestError>);
 
     view! {
         <h1>"Loans"</h1>
@@ -88,10 +88,13 @@ pub fn Loans() -> impl IntoView {
                     .get()
                     .map(|result| match result {
                         Err(e) => view! { <ErrorMessage error=e/> }.into_any(),
+                        Ok(list) if list.items.is_empty() && page.get() > 1 => {
+                            view! { <OutOfRange on_page/> }.into_any()
+                        }
                         Ok(list) => {
                             let (per_page, total) = (list.per_page, list.total);
                             view! {
-                                <LoansTable loans=list.items on_changed/>
+                                <LoansTable loans=list.items on_changed error=return_error/>
                                 <Pagination page=page.get() per_page total on_page/>
                             }
                                 .into_any()
@@ -103,23 +106,33 @@ pub fn Loans() -> impl IntoView {
 }
 
 /// Table of loans with a Return button on unreturned rows. `on_changed`
-/// tells the parent to refetch after a successful return.
+/// tells the parent to refetch after a return attempt (also a failed one, so
+/// a stale row disappears); `error` is owned by the parent for that reason.
 #[component]
-pub fn LoansTable(loans: Vec<Loan>, on_changed: Callback<()>) -> impl IntoView {
-    let error = RwSignal::new(None::<ApiRequestError>);
-
+pub fn LoansTable(
+    loans: Vec<Loan>,
+    on_changed: Callback<()>,
+    error: RwSignal<Option<ApiRequestError>>,
+) -> impl IntoView {
     let return_loan = move |id: i64| {
         error.set(None);
         spawn_local(async move {
             match api::loans::return_loan(id).await {
                 Ok(_) => on_changed.run(()),
-                Err(e) => error.set(Some(e)),
+                Err(e) => {
+                    error.set(Some(e));
+                    on_changed.run(());
+                }
             }
         });
     };
 
     if loans.is_empty() {
-        return view! { <p>"No loans found."</p> }.into_any();
+        return view! {
+            {move || error.get().map(|e| view! { <ErrorMessage error=e/> })}
+            <p>"No loans found."</p>
+        }
+        .into_any();
     }
 
     view! {

@@ -5,7 +5,7 @@ use leptos::task::spawn_local;
 use leptos_router::hooks::{use_navigate, use_query_map};
 use library_shared::{Availability, BookQuery, MemberQuery, NewLoan};
 
-use crate::api::{self, ApiRequestError};
+use crate::api;
 use crate::components::error_message::ErrorMessage;
 use crate::components::search_box::SearchBox;
 use crate::url::parse_id;
@@ -87,6 +87,15 @@ pub fn LoanNew() -> impl IntoView {
             .collect(),
         _ => Vec::new(),
     });
+    // `(shown, total)` when the API has more matches than the first page.
+    let book_more = Signal::derive(move || match books.get() {
+        Some(Ok(page)) => truncation(page.items.len(), page.total),
+        _ => None,
+    });
+    let member_more = Signal::derive(move || match members.get() {
+        Some(Ok(page)) => truncation(page.items.len(), page.total),
+        _ => None,
+    });
     let member_options = Signal::derive(move || match members.get() {
         Some(Ok(page)) => page
             .items
@@ -108,8 +117,12 @@ pub fn LoanNew() -> impl IntoView {
             .or(member_prefill_err)
     });
 
-    let error = RwSignal::new(None::<ApiRequestError>);
+    // Message of the last failed submit (API or "choose both").
+    let error = RwSignal::new(None::<String>);
     let busy = RwSignal::new(false);
+    // Lend stays disabled until both pickers have a value.
+    let incomplete =
+        move || book_choice.with(Option::is_none) || member_choice.with(Option::is_none);
 
     let on_submit = move |ev: leptos::ev::SubmitEvent| {
         ev.prevent_default();
@@ -117,12 +130,7 @@ pub fn LoanNew() -> impl IntoView {
             book_choice.get_untracked().map(|(id, _)| id),
             member_choice.get_untracked().map(|(id, _)| id),
         ) else {
-            error.set(Some(ApiRequestError {
-                status: 0,
-                code: "validation_error".into(),
-                message: "Choose a book and a member".into(),
-                fields: Default::default(),
-            }));
+            error.set(Some("Choose a book and a member".into()));
             return;
         };
         error.set(None);
@@ -133,28 +141,42 @@ pub fn LoanNew() -> impl IntoView {
                 book_id: book,
                 member_id: member,
             };
-            match api::loans::create(&request).await {
-                Ok(_) => navigate("/loans", Default::default()),
-                Err(e) => error.set(Some(e)),
-            }
+            let result = api::loans::create(&request).await;
             busy.set(false);
+            match result {
+                Ok(_) => navigate("/loans", Default::default()),
+                Err(e) => error.set(Some(e.message)),
+            }
         });
     };
 
     view! {
         <h1>"New loan"</h1>
-        <form on:submit=on_submit>
+        // `novalidate` turns off the browser's own validation bubbles so the
+        // server's field errors (shown by <FieldError>) are what users see.
+        <form novalidate on:submit=on_submit>
             <Picker
                 label="Book (available only)"
                 search=book_search
                 selected=book_choice
                 options=book_options
+                more=book_more
             />
-            <Picker label="Member" search=member_search selected=member_choice options=member_options/>
+            <Picker
+                label="Member"
+                search=member_search
+                selected=member_choice
+                options=member_options
+                more=member_more
+            />
             {move || load_error.get().map(|e| view! { <ErrorMessage error=e/> })}
-            {move || error.get().map(|e| view! { <ErrorMessage error=e/> })}
+            {move || error.get().map(|message| view! { <p role="alert" class="error">{message}</p> })}
             <div class="actions">
-                <button type="submit" aria-busy=move || busy.get().then_some("true") disabled=move || busy.get()>
+                <button
+                    type="submit"
+                    aria-busy=move || busy.get().then_some("true")
+                    disabled=move || busy.get() || incomplete()
+                >
                     "Lend"
                 </button>
                 <a href="/loans" role="button" class="secondary outline">
@@ -163,6 +185,11 @@ pub fn LoanNew() -> impl IntoView {
             </div>
         </form>
     }
+}
+
+/// `Some((shown, total))` when results were cut off by the page size.
+fn truncation(shown: usize, total: u64) -> Option<(usize, u64)> {
+    (total > shown as u64).then_some((shown, total))
 }
 
 fn member_label(name: &str, email: &str) -> String {
@@ -181,6 +208,7 @@ fn Picker(
     search: RwSignal<String>,
     selected: RwSignal<Option<(i64, String)>>,
     #[prop(into)] options: Signal<Vec<(i64, String)>>,
+    more: Signal<Option<(usize, u64)>>,
 ) -> impl IntoView {
     // Chosen option first, then the rest of the results without a duplicate.
     let all_options = Memo::new(move |_| {
@@ -235,6 +263,16 @@ fn Picker(
                         .collect_view()
                 }}
             </select>
+            {move || {
+                more.get()
+                    .map(|(shown, total)| {
+                        view! {
+                            <small>
+                                {format!("Showing the first {shown} of {total} — type to narrow the search")}
+                            </small>
+                        }
+                    })
+            }}
         </label>
     }
 }

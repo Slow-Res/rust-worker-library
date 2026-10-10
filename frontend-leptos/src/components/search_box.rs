@@ -1,11 +1,9 @@
 //! Search input that reports changes 300 ms after the user stops typing.
 
-use std::time::Duration;
-
 use gloo_timers::callback::Timeout;
 use leptos::prelude::*;
 
-const DEBOUNCE: Duration = Duration::from_millis(300);
+const DEBOUNCE_MS: u32 = 300;
 
 /// Whether the input should adopt the committed (URL) value. Callers trim
 /// what they commit, so a trailing space the user typed must not count as a
@@ -45,7 +43,7 @@ pub fn SearchBox(
         let next = event_target_value(&ev);
         text.set(next.clone());
         typing.set_value(true);
-        pending.set_value(Some(Timeout::new(DEBOUNCE.as_millis() as u32, move || {
+        pending.set_value(Some(Timeout::new(DEBOUNCE_MS, move || {
             typing.set_value(false);
             on_change.run(next);
         })));
