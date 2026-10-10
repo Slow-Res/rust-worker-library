@@ -11,12 +11,17 @@ pub fn confirm(message: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// `YYYY-MM-DD` in the browser's local time zone.
-pub fn local_date(instant: DateTime<Utc>) -> String {
+/// The browser's UTC offset at `instant`, in minutes (JavaScript's `getTimezoneOffset()`).
+pub fn local_offset_minutes(instant: DateTime<Utc>) -> i32 {
     let js_date = js_sys::Date::new(&wasm_bindgen::JsValue::from_f64(
         instant.timestamp_millis() as f64
     ));
     // `get_timezone_offset` is whole or fractional minutes; rounding is fine
     // for a date-only display.
-    format_date(instant, js_date.get_timezone_offset().round() as i32)
+    js_date.get_timezone_offset().round() as i32
+}
+
+/// `YYYY-MM-DD` in the browser's local time zone.
+pub fn local_date(instant: DateTime<Utc>) -> String {
+    format_date(instant, local_offset_minutes(instant))
 }

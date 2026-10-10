@@ -7,7 +7,7 @@ use leptos_router::hooks::{use_navigate, use_query_map};
 use library_shared::{Loan, LoanQuery, LoanStatus};
 
 use crate::api::{self, ApiRequestError};
-use crate::browser::local_date;
+use crate::browser::{local_date, local_offset_minutes};
 use crate::components::error_message::ErrorMessage;
 use crate::components::pagination::{OutOfRange, Pagination};
 use crate::format::loan_status_label;
@@ -154,6 +154,10 @@ pub fn LoansTable(
                     .map(|loan| {
                         let id = loan.id;
                         let returned = loan.returned_at.is_some();
+                        let status = loan_status_label(
+                            &loan,
+                            loan.returned_at.map_or(0, local_offset_minutes),
+                        );
                         view! {
                             <tr class:overdue=loan.is_overdue && !returned>
                                 <td>
@@ -164,7 +168,7 @@ pub fn LoansTable(
                                 </td>
                                 <td>{local_date(loan.borrowed_at)}</td>
                                 <td>{local_date(loan.due_at)}</td>
-                                <td>{loan_status_label(&loan)}</td>
+                                <td>{status}</td>
                                 <td class="actions">
                                     {(!returned)
                                         .then(|| {

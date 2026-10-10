@@ -18,13 +18,12 @@ pub fn copies_label(available: i64, total: i64) -> String {
     format!("{available} / {total}")
 }
 
-pub fn loan_status_label(loan: &Loan) -> &'static str {
-    if loan.returned_at.is_some() {
-        "Returned"
-    } else if loan.is_overdue {
-        "Overdue"
-    } else {
-        "Active"
+/// "Returned YYYY-MM-DD", "Overdue" or "Active". `offset_minutes` is as in [`format_date`].
+pub fn loan_status_label(loan: &Loan, offset_minutes: i32) -> String {
+    match loan.returned_at {
+        Some(returned_at) => format!("Returned {}", format_date(returned_at, offset_minutes)),
+        None if loan.is_overdue => "Overdue".to_string(),
+        None => "Active".to_string(),
     }
 }
 
@@ -69,11 +68,12 @@ mod tests {
             returned_at: None,
             is_overdue: true,
         };
-        assert_eq!(loan_status_label(&loan), "Overdue");
+        assert_eq!(loan_status_label(&loan, 0), "Overdue");
         loan.returned_at = Some(now);
-        assert_eq!(loan_status_label(&loan), "Returned");
+        assert_eq!(loan_status_label(&loan, 0), "Returned 2027-01-15");
+        assert_eq!(loan_status_label(&loan, -1_000), "Returned 2027-01-16");
         loan.returned_at = None;
         loan.is_overdue = false;
-        assert_eq!(loan_status_label(&loan), "Active");
+        assert_eq!(loan_status_label(&loan, 0), "Active");
     }
 }
