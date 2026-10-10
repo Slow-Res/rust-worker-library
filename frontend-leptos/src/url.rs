@@ -71,11 +71,20 @@ pub fn page_param(page: u32) -> String {
     }
 }
 
-/// Only same-site absolute paths may be used as a post-login destination;
-/// anything else (e.g. `//evil.com`) falls back to `/loans`.
+/// Only same-site absolute paths may be used as a post-login destination.
+/// Browsers treat `\` like `/`, so `/\evil.com` would become the
+/// protocol-relative `//evil.com`; reject backslashes and control characters
+/// outright. Anything rejected falls back to `/loans`.
 pub fn safe_next(raw: Option<&str>) -> String {
     match raw {
-        Some(next) if next.starts_with('/') && !next.starts_with("//") => next.to_string(),
+        Some(next)
+            if next.starts_with('/')
+                && !next.starts_with("//")
+                && !next.contains('\\')
+                && !next.chars().any(|c| c.is_ascii_control()) =>
+        {
+            next.to_string()
+        }
         _ => "/loans".to_string(),
     }
 }
@@ -142,6 +151,11 @@ mod tests {
     fn next_must_be_a_local_path() {
         assert_eq!(safe_next(Some("/members?page=2")), "/members?page=2");
         assert_eq!(safe_next(Some("//evil.com")), "/loans");
+        assert_eq!(safe_next(Some("/\\evil.com")), "/loans");
+        assert_eq!(safe_next(Some("/\t/evil.com")), "/loans");
+        assert_eq!(safe_next(Some("/a\nb")), "/loans");
+        // Percent-encoded backslash is not normalised by browsers: same-origin.
+        assert_eq!(safe_next(Some("/%5Cevil.com")), "/%5Cevil.com");
         assert_eq!(safe_next(Some("https://evil.com")), "/loans");
         assert_eq!(safe_next(None), "/loans");
     }
