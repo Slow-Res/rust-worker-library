@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router'
 import { booksKey, deleteBook, listBooks } from '../api/books'
+import { invalidateLibraryData } from '../api/invalidate'
 import { useCurrentUser } from '../auth/useCurrentUser'
+import { EmptyList } from '../components/EmptyList'
 import { ErrorMessage } from '../components/ErrorMessage'
 import { Pagination } from '../components/Pagination'
 import { SearchBox } from '../components/SearchBox'
@@ -33,7 +35,7 @@ export function BooksPage() {
   const remove = useMutation({
     mutationFn: deleteBook,
     onSuccess: async () => {
-      await Promise.all(['books', 'book', 'loans'].map((key) => queryClient.invalidateQueries({ queryKey: [key] })))
+      await invalidateLibraryData(queryClient, 'books', 'book', 'loans')
     },
   })
 
@@ -70,7 +72,7 @@ export function BooksPage() {
       <ErrorMessage error={books.error} />
       {books.data &&
         (books.data.items.length === 0 ? (
-          <p>No books found.</p>
+          <EmptyList message="No books found." page={books.data.page} />
         ) : (
           <>
             <table>

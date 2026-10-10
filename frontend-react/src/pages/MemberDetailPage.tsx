@@ -52,7 +52,7 @@ function MemberDetailView({ id }: { id: number }) {
       <ErrorMessage error={loans.error} />
       {loans.data && (
         <>
-          <LoansTable loans={loans.data.items} showMember={false} />
+          <LoansTable loans={loans.data.items} showMember={false} page={loans.data.page} />
           <Pagination
             page={loans.data.page}
             perPage={loans.data.per_page}

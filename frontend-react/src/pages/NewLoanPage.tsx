@@ -5,6 +5,7 @@ import { bookKey, booksKey, getBook, listBooks } from '../api/books'
 import { fieldErrorsOf, isGeneralError } from '../api/client'
 import { createLoan } from '../api/loans'
 import { getMember, listMembers, memberKey, membersKey } from '../api/members'
+import { invalidateLibraryData } from '../api/invalidate'
 import { ErrorMessage } from '../components/ErrorMessage'
 import { Picker, type PickerOption } from '../components/Picker'
 import type { BookQuery } from '../generated/BookQuery'
@@ -66,9 +67,7 @@ export function NewLoanPage() {
   const lend = useMutation({
     mutationFn: createLoan,
     onSuccess: async () => {
-      await Promise.all(
-        ['loans', 'books', 'book', 'members', 'member'].map((key) => queryClient.invalidateQueries({ queryKey: [key] })),
-      )
+      await invalidateLibraryData(queryClient, 'loans', 'books', 'book', 'members', 'member')
       void navigate('/loans')
     },
   })
@@ -92,6 +91,8 @@ export function NewLoanPage() {
           selectedId={bookId}
           onSelect={(id) => bookSelection.select(id, bookOptions)}
           isLoading={books.isFetching}
+          shown={books.data?.items.length}
+          total={books.data?.total}
           error={fields.book_id}
         />
         <Picker
@@ -102,6 +103,8 @@ export function NewLoanPage() {
           selectedId={memberId}
           onSelect={(id) => memberSelection.select(id, memberOptions)}
           isLoading={members.isFetching}
+          shown={members.data?.items.length}
+          total={members.data?.total}
           error={fields.member_id}
         />
         <ErrorMessage error={books.error ?? members.error} />

@@ -5,7 +5,7 @@ import { useCurrentUser } from '../auth/useCurrentUser'
 
 /** App shell: top navigation plus the routed page. */
 export function Layout() {
-  const { user } = useCurrentUser()
+  const { user, isLoading } = useCurrentUser()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
 
@@ -46,7 +46,7 @@ export function Layout() {
             )}
           </ul>
           <ul>
-            {user ? (
+            {isLoading ? null : user ? (
               <>
                 <li>{user.username}</li>
                 <li>

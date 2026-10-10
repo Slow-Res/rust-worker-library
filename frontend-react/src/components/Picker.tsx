@@ -14,11 +14,25 @@ interface PickerProps {
   selectedId: number | null
   onSelect: (id: number | null) => void
   isLoading: boolean
+  /** Search results returned vs. matching in total; a hint shows when results are cut off. */
+  shown?: number
+  total?: number
   error?: string
 }
 
 /** A search box plus a select of the matching options (used on the new-loan form). */
-export function Picker({ label, search, onSearch, options, selectedId, onSelect, isLoading, error }: PickerProps) {
+export function Picker({
+  label,
+  search,
+  onSearch,
+  options,
+  selectedId,
+  onSelect,
+  isLoading,
+  shown,
+  total,
+  error,
+}: PickerProps) {
   const errorId = useId()
   return (
     <fieldset>
@@ -39,6 +53,11 @@ export function Picker({ label, search, onSearch, options, selectedId, onSelect,
           </option>
         ))}
       </select>
+      {shown !== undefined && total !== undefined && total > shown ? (
+        <small>
+          Showing the first {shown} of {total} — type to narrow the search
+        </small>
+      ) : null}
       {error ? (
         <small id={errorId} className="error">
           {error}

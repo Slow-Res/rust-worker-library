@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useDebounce } from '../hooks/useDebounce'
+import { shouldSync } from './shouldSync'
 
 const DEBOUNCE_MS = 300
 
@@ -15,13 +16,22 @@ export function SearchBox({ label, value, onSearch }: SearchBoxProps) {
   const [text, setText] = useState(value)
   const debounced = useDebounce(text, DEBOUNCE_MS)
 
-  // Follow external changes (back/forward navigation).
-  useEffect(() => setText(value), [value])
+  const typing = text !== debounced
 
+  // Follow external changes (back/forward navigation) by adjusting state while rendering.
+  const [seenValue, setSeenValue] = useState(value)
+  if (value !== seenValue) {
+    setSeenValue(value)
+    if (shouldSync(text, value, typing)) setText(value)
+  }
+
+  // A settled keystroke triggers a search; later changes to `value` or `onSearch` must not.
+  const latest = useRef({ value, onSearch })
   useEffect(() => {
-    if (debounced !== value) onSearch(debounced)
-    // Only a settled keystroke should trigger a search, not a changed `value`.
-    // oxlint-disable-next-line react-hooks/exhaustive-deps
+    latest.current = { value, onSearch }
+  })
+  useEffect(() => {
+    if (debounced !== latest.current.value) latest.current.onSearch(debounced)
   }, [debounced])
 
   return (
