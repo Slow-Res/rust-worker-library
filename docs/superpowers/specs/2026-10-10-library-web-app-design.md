@@ -133,7 +133,7 @@ it belongs to.
 | Var | Default | Notes |
 |---|---|---|
 | `DATABASE_URL` | `sqlite://data/library.db` | Parent dir created if missing; file created if missing. |
-| `BIND_ADDR` | `127.0.0.1:3000` | |
+| `BIND_ADDR` | `127.0.0.1:4000` | |
 | `FRONTEND_DIR` | unset | If set, serve that directory as static files with SPA fallback to `index.html`. |
 | `COOKIE_SECURE` | `false` | `true` in production (HTTPS). |
 | `SESSION_TTL_HOURS` | `168` | 7 days. |
@@ -440,7 +440,7 @@ Shared UX contract:
 - Dates displayed as `YYYY-MM-DD` (local time).
 - Pico CSS v2 for styling; a tiny app stylesheet for overdue highlighting
   and layout tweaks only.
-- Dev servers proxy `/api` → `http://127.0.0.1:3000`: React (Vite) on port
+- Dev servers proxy `/api` → `http://127.0.0.1:4000`: React (Vite) on port
   5173, Leptos (Trunk) on port 8080. All requests same-origin with cookies.
 
 React structure (`frontend-react/src/`): `main.tsx`, `App.tsx` (routes),
