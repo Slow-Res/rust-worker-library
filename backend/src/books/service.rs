@@ -11,7 +11,7 @@ use super::repo::{BookFilter, BookRepository, DeleteBookOutcome, UpdateBookOutco
 use crate::clock::Clock;
 use crate::db::RepoError;
 use crate::error::AppError;
-use crate::pagination::PageParams;
+use crate::pagination::{PageParams, search_term};
 
 /// The unique index on `books.isbn` shows up as this constraint name.
 const ISBN_CONSTRAINT: &str = "books.isbn";
@@ -30,10 +30,7 @@ impl BookService {
     pub async fn list(&self, query: BookQuery) -> Result<Page<Book>, AppError> {
         let page = PageParams::new(query.page, query.per_page);
         let filter = BookFilter {
-            q: query
-                .q
-                .map(|q| q.trim().to_owned())
-                .filter(|q| !q.is_empty()),
+            q: search_term(query.q)?,
             availability: query.availability.unwrap_or(Availability::All),
         };
         let (records, total) = self.repo.list(&filter, page).await?;

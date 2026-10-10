@@ -98,7 +98,16 @@ fn push_filter(builder: &mut QueryBuilder<Sqlite>, filter: &BookFilter) {
         builder.push_bind(pattern.clone());
         builder.push(" ESCAPE '\\' OR b.isbn LIKE ");
         builder.push_bind(pattern);
-        builder.push(" ESCAPE '\\')");
+        builder.push(" ESCAPE '\\'");
+        // ISBNs are stored without spaces or hyphens, so also match `q` with
+        // those removed. Skipped when nothing is left, or `%%` would match all.
+        let digits: String = q.chars().filter(|c| !matches!(c, ' ' | '-')).collect();
+        if !digits.is_empty() {
+            builder.push(" OR b.isbn LIKE ");
+            builder.push_bind(format!("%{}%", escape_like(&digits)));
+            builder.push(" ESCAPE '\\'");
+        }
+        builder.push(")");
     }
     match filter.availability {
         Availability::All => {}

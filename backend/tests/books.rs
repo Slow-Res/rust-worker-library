@@ -187,6 +187,46 @@ async fn search_matches_title_author_isbn_case_insensitively(pool: SqlitePool) {
 }
 
 #[sqlx::test]
+async fn search_matches_isbn_typed_with_hyphens_or_spaces(pool: SqlitePool) {
+    let app = TestApp::new(pool);
+    let cookie = app.login("ada", "password123").await;
+    create(&app, &cookie, book("The Rust Book")).await;
+    create(
+        &app,
+        &cookie,
+        json!({ "title": "Dune", "author": "Frank Herbert", "isbn": "9780131103627", "published_year": null, "total_copies": 1 }),
+    )
+    .await;
+
+    let (_, _, page) = app.get("/api/books?q=978-0-13-110362-7", None).await;
+    assert_eq!(titles(&page), ["Dune"]);
+    let (_, _, page) = app.get("/api/books?q=978%200131", None).await;
+    assert_eq!(titles(&page), ["Dune"]);
+    // Only separators left after stripping: not a match-everything pattern.
+    let (_, _, page) = app.get("/api/books?q=-", None).await;
+    assert_eq!(page["total"], 0);
+}
+
+#[sqlx::test]
+async fn search_longer_than_200_chars_is_rejected(pool: SqlitePool) {
+    let app = TestApp::new(pool);
+    let (status, _, body) = app
+        .get(&format!("/api/books?q={}", "a".repeat(201)), None)
+        .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["error"]["code"], "validation_error");
+    assert_eq!(
+        body["error"]["fields"]["q"],
+        "must be at most 200 characters"
+    );
+
+    let (status, _, _) = app
+        .get(&format!("/api/books?q={}", "a".repeat(200)), None)
+        .await;
+    assert_eq!(status, StatusCode::OK);
+}
+
+#[sqlx::test]
 async fn search_treats_wildcards_literally(pool: SqlitePool) {
     let app = TestApp::new(pool);
     let cookie = app.login("ada", "password123").await;

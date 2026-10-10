@@ -114,9 +114,25 @@ async fn list_searches_name_and_email_ordered_by_name(pool: SqlitePool) {
     assert_eq!(names(&by_name), ["Alice"]);
     let (_, _, by_email) = app.get("/api/members?q=example.com", Some(&cookie)).await;
     assert_eq!(names(&by_email), ["Bob", "Charlie"]);
-    // `_` and `%` are literal, not wildcards.
+    // `%` and `_` are literal, not wildcards.
     let (_, _, none) = app.get("/api/members?q=%25", Some(&cookie)).await;
     assert_eq!(none["total"], 0);
+    let (_, _, none) = app.get("/api/members?q=_", Some(&cookie)).await;
+    assert_eq!(none["total"], 0);
+}
+
+#[sqlx::test]
+async fn search_longer_than_200_chars_is_rejected(pool: SqlitePool) {
+    let app = TestApp::new(pool);
+    let cookie = app.login("ada", "password123").await;
+    let uri = format!("/api/members?q={}", "a".repeat(201));
+    let (status, _, body) = app.get(&uri, Some(&cookie)).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["error"]["code"], "validation_error");
+    assert_eq!(
+        body["error"]["fields"]["q"],
+        "must be at most 200 characters"
+    );
 }
 
 #[sqlx::test]

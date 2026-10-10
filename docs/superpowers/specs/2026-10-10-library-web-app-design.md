@@ -309,6 +309,8 @@ Search/filter semantics:
   escaped). `availability`: `all` (default) | `available`
   (available_copies > 0) | `on_loan` (active loans > 0). Order: title ASC, id ASC.
 - Members: `q` matches name or email. Order: name ASC, id ASC.
+- Books isbn match also tries `q` with spaces and hyphens removed. A trimmed `q` over
+  200 characters is a 422 `validation_error` on field `q`.
 - Loans: `status`: `active` (default; returned_at NULL) | `overdue` (active
   and due_at < now) | `returned` | `all`; optional `member_id`, `book_id`.
   Order: active/overdue/all by due_at ASC, id ASC; returned by returned_at DESC, id DESC.

@@ -10,7 +10,7 @@ use super::repo::{DeleteMemberOutcome, MemberFilter, MemberRepository};
 use crate::clock::Clock;
 use crate::db::RepoError;
 use crate::error::AppError;
-use crate::pagination::PageParams;
+use crate::pagination::{PageParams, search_term};
 
 /// The unique constraint on `members.email` shows up as this name.
 const EMAIL_CONSTRAINT: &str = "members.email";
@@ -29,10 +29,7 @@ impl MemberService {
     pub async fn list(&self, query: MemberQuery) -> Result<Page<Member>, AppError> {
         let page = PageParams::new(query.page, query.per_page);
         let filter = MemberFilter {
-            q: query
-                .q
-                .map(|q| q.trim().to_owned())
-                .filter(|q| !q.is_empty()),
+            q: search_term(query.q)?,
         };
         let (records, total) = self.repo.list(&filter, page).await?;
         Ok(page.into_page(records.into_iter().map(Member::from).collect(), total))

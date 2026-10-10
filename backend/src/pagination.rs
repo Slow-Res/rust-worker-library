@@ -1,9 +1,28 @@
-//! Normalization of `page` / `per_page` query parameters (spec §5.8).
+//! Normalization of list query parameters: `page` / `per_page` and the search
+//! term `q` (spec §5.8).
 
 use library_shared::Page;
 
+use crate::error::{AppError, FieldErrors};
+
 pub const DEFAULT_PER_PAGE: u32 = 20;
 pub const MAX_PER_PAGE: u32 = 100;
+/// SQLite rejects very long `LIKE` patterns (as a 500), so cap the term up front.
+const MAX_SEARCH_CHARS: usize = 200;
+
+/// Trim a search term; blank means "no filter". Longer than
+/// [`MAX_SEARCH_CHARS`] characters is a 422 on field `q`.
+pub fn search_term(q: Option<String>) -> Result<Option<String>, AppError> {
+    let Some(q) = q.map(|q| q.trim().to_owned()).filter(|q| !q.is_empty()) else {
+        return Ok(None);
+    };
+    if q.chars().count() > MAX_SEARCH_CHARS {
+        let mut errors = FieldErrors::new();
+        errors.add("q", "must be at most 200 characters");
+        return Err(AppError::Validation(errors));
+    }
+    Ok(Some(q))
+}
 
 /// Validated pagination: `page >= 1`, `per_page` within `1..=100`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
