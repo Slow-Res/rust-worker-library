@@ -88,6 +88,18 @@ pub fn from_timestamp(secs: i64) -> Result<DateTime<Utc>, RepoError> {
         .ok_or_else(|| RepoError::Unexpected(anyhow::anyhow!("timestamp {secs} out of range")))
 }
 
+/// Escape `%`, `_` and `\` so user text matches literally inside `LIKE ... ESCAPE '\'`.
+pub(crate) fn escape_like(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        if matches!(c, '%' | '_' | '\\') {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

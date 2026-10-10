@@ -7,7 +7,7 @@ use sqlx::{QueryBuilder, Sqlite, SqliteConnection, SqlitePool};
 
 use super::domain::BookFields;
 use super::repo::{BookFilter, BookRecord, BookRepository, DeleteBookOutcome, UpdateBookOutcome};
-use crate::db::{RepoError, from_timestamp, to_timestamp};
+use crate::db::{RepoError, escape_like, from_timestamp, to_timestamp};
 use crate::pagination::PageParams;
 
 // SQL fragments shared by several queries. They are macros (not `const`s)
@@ -79,18 +79,6 @@ impl TryFrom<BookRow> for BookRecord {
             updated_at: from_timestamp(row.updated_at)?,
         })
     }
-}
-
-/// Escape `%`, `_` and `\` so user text matches literally inside `LIKE ... ESCAPE '\'`.
-fn escape_like(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    for c in text.chars() {
-        if matches!(c, '%' | '_' | '\\') {
-            out.push('\\');
-        }
-        out.push(c);
-    }
-    out
 }
 
 /// Append the `WHERE` clause for `filter`. Used for both the page query and the

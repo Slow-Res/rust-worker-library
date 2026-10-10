@@ -6,7 +6,7 @@ use sqlx::{QueryBuilder, Sqlite, SqliteConnection, SqlitePool};
 
 use super::domain::MemberFields;
 use super::repo::{DeleteMemberOutcome, MemberFilter, MemberRecord, MemberRepository};
-use crate::db::{RepoError, from_timestamp, to_timestamp};
+use crate::db::{RepoError, escape_like, from_timestamp, to_timestamp};
 use crate::pagination::PageParams;
 
 /// `SELECT ... FROM members m`, shaped like [`MemberRow`].
@@ -56,18 +56,6 @@ impl TryFrom<MemberRow> for MemberRecord {
             updated_at: from_timestamp(row.updated_at)?,
         })
     }
-}
-
-/// Escape `%`, `_` and `\` so user text matches literally inside `LIKE ... ESCAPE '\'`.
-fn escape_like(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    for c in text.chars() {
-        if matches!(c, '%' | '_' | '\\') {
-            out.push('\\');
-        }
-        out.push(c);
-    }
-    out
 }
 
 /// Append the `WHERE` clause for `filter`; shared by the page and count queries.
