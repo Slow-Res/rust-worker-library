@@ -5,6 +5,7 @@ use std::sync::Arc;
 use axum::extract::FromRef;
 use sqlx::SqlitePool;
 
+use crate::auth::{AuthService, SqliteAuthRepository};
 use crate::clock::Clock;
 use crate::config::Config;
 
@@ -21,14 +22,21 @@ pub struct AppState {
     /// `Arc<dyn Clock>`: a cheap-to-clone handle to *some* clock, chosen at startup
     /// (the real one in production, a fixed one in tests).
     pub clock: Arc<dyn Clock>,
+    pub auth: AuthService,
 }
 
 impl AppState {
     pub fn new(pool: SqlitePool, config: Arc<Config>, clock: Arc<dyn Clock>) -> Self {
+        let auth = AuthService::new(
+            Arc::new(SqliteAuthRepository::new(pool.clone())),
+            clock.clone(),
+            chrono::Duration::hours(config.session_ttl_hours),
+        );
         Self {
             pool,
             config,
             clock,
+            auth,
         }
     }
 }

@@ -28,6 +28,11 @@ impl FieldErrors {
             .or_insert_with(|| message.to_owned());
     }
 
+    /// `(field, message)` pairs in field-name order.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.0.iter().map(|(k, v)| (k.as_str(), v.as_str()))
+    }
+
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
@@ -52,6 +57,10 @@ pub enum AppError {
     BadRequest(String),
     #[error("unauthorized")]
     Unauthorized,
+    /// Failed login. Same status and code as `Unauthorized`, but with the
+    /// message spec §5.7 requires (identical for unknown user and wrong password).
+    #[error("invalid username or password")]
+    InvalidCredentials,
     #[error("{0} not found")]
     NotFound(&'static str),
     #[error("{message}")]
@@ -93,7 +102,7 @@ impl AppError {
         match self {
             Self::Validation(_) => StatusCode::UNPROCESSABLE_ENTITY,
             Self::BadRequest(_) => StatusCode::BAD_REQUEST,
-            Self::Unauthorized => StatusCode::UNAUTHORIZED,
+            Self::Unauthorized | Self::InvalidCredentials => StatusCode::UNAUTHORIZED,
             Self::NotFound(_) => StatusCode::NOT_FOUND,
             Self::Conflict { .. } => StatusCode::CONFLICT,
             Self::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
@@ -109,6 +118,7 @@ impl AppError {
             ),
             Self::BadRequest(message) => ("bad_request", message.clone(), None),
             Self::Unauthorized => ("unauthorized", "Authentication required".to_owned(), None),
+            Self::InvalidCredentials => ("unauthorized", self.to_string(), None),
             Self::NotFound(_) => ("not_found", self.to_string(), None),
             Self::Conflict { code, message } => (*code, message.clone(), None),
             Self::Internal(_) => ("internal", "Internal server error".to_owned(), None),
@@ -174,6 +184,14 @@ mod tests {
         let (status, body) = render(AppError::Unauthorized).await;
         assert_eq!(status, StatusCode::UNAUTHORIZED);
         assert_eq!(body["error"]["code"], "unauthorized");
+    }
+
+    #[tokio::test]
+    async fn invalid_credentials_is_401_with_its_own_message() {
+        let (status, body) = render(AppError::InvalidCredentials).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+        assert_eq!(body["error"]["code"], "unauthorized");
+        assert_eq!(body["error"]["message"], "invalid username or password");
     }
 
     #[tokio::test]
