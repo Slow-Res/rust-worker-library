@@ -47,7 +47,7 @@ impl Config {
         Ok(Self {
             database_url: get("DATABASE_URL")
                 .unwrap_or_else(|| "sqlite://data/library.db".to_owned()),
-            bind_addr: parse_or(&get, "BIND_ADDR", SocketAddr::from(([127, 0, 0, 1], 3000)))?,
+            bind_addr: parse_or(&get, "BIND_ADDR", SocketAddr::from(([127, 0, 0, 1], 4000)))?,
             frontend_dir: get("FRONTEND_DIR")
                 .filter(|v| !v.is_empty())
                 .map(PathBuf::from),
@@ -89,7 +89,7 @@ mod tests {
     fn defaults_apply_when_unset() {
         let config = Config::from_lookup(lookup(&[])).unwrap();
         assert_eq!(config.database_url, "sqlite://data/library.db");
-        assert_eq!(config.bind_addr.to_string(), "127.0.0.1:3000");
+        assert_eq!(config.bind_addr.to_string(), "127.0.0.1:4000");
         assert!(config.frontend_dir.is_none());
         assert!(!config.cookie_secure);
         assert_eq!(config.session_ttl_hours, 168);

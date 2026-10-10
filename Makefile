@@ -19,8 +19,8 @@ fmt:
 types: ## Regenerate TypeScript types from the shared crate
 	cargo test -p library-shared --features ts
 
+# sqlx-cli runs from backend/, so give it an absolute path to the dev DB.
 sqlx-prepare: ## Refresh committed offline query metadata
-	# sqlx-cli runs from backend/, so give it an absolute path to the dev DB.
 	cd backend && DATABASE_URL=sqlite://$(CURDIR)/data/dev.db cargo sqlx prepare
 
 check:
