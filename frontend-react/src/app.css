@@ -39,7 +39,7 @@ tr.overdue td {
 }
 
 @media (prefers-color-scheme: dark) {
-  tr.overdue {
+  tr.overdue td {
     background-color: #4a1a1a;
     color: #ffd6d6;
   }
