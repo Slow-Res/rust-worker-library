@@ -9,6 +9,7 @@ use crate::auth::{AuthService, SqliteAuthRepository};
 use crate::books::{BookService, SqliteBookRepository};
 use crate::clock::Clock;
 use crate::config::Config;
+use crate::loans::{LoanService, SqliteLoanRepository};
 use crate::members::{MemberService, SqliteMemberRepository};
 
 /// Everything handlers need. Feature services (auth, books, ...) are added as
@@ -27,6 +28,7 @@ pub struct AppState {
     pub auth: AuthService,
     pub books: BookService,
     pub members: MemberService,
+    pub loans: LoanService,
 }
 
 impl AppState {
@@ -44,6 +46,10 @@ impl AppState {
             Arc::new(SqliteMemberRepository::new(pool.clone())),
             clock.clone(),
         );
+        let loans = LoanService::new(
+            Arc::new(SqliteLoanRepository::new(pool.clone())),
+            clock.clone(),
+        );
         Self {
             pool,
             config,
@@ -51,6 +57,7 @@ impl AppState {
             auth,
             books,
             members,
+            loans,
         }
     }
 }

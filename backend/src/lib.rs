@@ -14,6 +14,7 @@ pub mod db;
 pub mod error;
 pub mod extract;
 pub mod health;
+pub mod loans;
 pub mod members;
 pub mod pagination;
 pub mod server;
