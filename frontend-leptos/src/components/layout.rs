@@ -18,8 +18,10 @@ pub fn Layout(children: Children) -> impl IntoView {
         spawn_local(async move {
             // Even if the server call fails, drop the local session view.
             let _ = api::auth::logout().await;
-            auth.user.set(None);
+            // Navigate first: clearing the user while still on a protected
+            // page would make `RequireAuth` redirect to /login before we leave.
             navigate("/books", Default::default());
+            auth.user.set(None);
         });
     };
 
@@ -46,7 +48,9 @@ pub fn Layout(children: Children) -> impl IntoView {
                     </Show>
                 </ul>
                 <ul>
-                    {move || match auth.user.get() {
+                    // Wait for the startup `/api/auth/me` check so logged-in
+                    // users never see a flash of "Log in".
+                    {move || auth.ready.get().then(|| match auth.user.get() {
                         Some(user) => {
                             view! {
                                 <li>{user.username}</li>
@@ -66,7 +70,7 @@ pub fn Layout(children: Children) -> impl IntoView {
                             }
                                 .into_any()
                         }
-                    }}
+                    })}
                 </ul>
             </nav>
         </header>

@@ -58,13 +58,19 @@ pub fn RequireAuth() -> impl IntoView {
     let location = use_location();
 
     view! {
+        // This closure re-runs whenever `auth.ready` / `auth.user` change.
+        // The location is read with `get_untracked` on purpose: a tracked read
+        // would subscribe us to the URL, so after the redirect moved us to
+        // `/login?next=...` we would re-run, build `next` from the login URL
+        // and redirect again, forever. Untracked, we capture "where the user
+        // was" exactly once, at the moment they lost access.
         {move || {
             if !auth.ready.get() {
                 view! { <p aria-busy="true">"Loading…"</p> }.into_any()
             } else if auth.user.get().is_some() {
                 view! { <Outlet/> }.into_any()
             } else {
-                let here = format!("{}{}", location.pathname.get(), location.search.get());
+                let here = format!("{}{}", location.pathname.get_untracked(), location.search.get_untracked());
                 let to = build_url("/login", &[("next", &here)]);
                 view! { <leptos_router::components::Redirect path=to/> }.into_any()
             }
