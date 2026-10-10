@@ -3,7 +3,7 @@
 use clap::Parser;
 use library_backend::cli::{Cli, Command};
 use library_backend::config::Config;
-use library_backend::{server, telemetry};
+use library_backend::{commands, server, telemetry};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -16,5 +16,9 @@ async fn main() -> anyhow::Result<()> {
 
     match command {
         Command::Serve => server::serve(config).await,
+        Command::CreateUser {
+            username,
+            password_stdin,
+        } => commands::create_user(config, &username, password_stdin).await,
     }
 }

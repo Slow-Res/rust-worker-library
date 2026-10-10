@@ -19,6 +19,13 @@ pub struct Cli {
 pub enum Command {
     /// Run the HTTP server.
     Serve,
+    /// Create a librarian account (prompts for the password twice).
+    CreateUser {
+        username: String,
+        /// Read the password from the first line of stdin instead of prompting.
+        #[arg(long)]
+        password_stdin: bool,
+    },
 }
 
 impl Cli {
@@ -36,6 +43,23 @@ mod tests {
     fn no_subcommand_means_serve() {
         let cli = Cli::parse_from(["library-backend"]);
         assert_eq!(cli.command(), Command::Serve);
+    }
+
+    #[test]
+    fn create_user_parses_username_and_flag() {
+        let cli = Cli::parse_from([
+            "library-backend",
+            "create-user",
+            "admin",
+            "--password-stdin",
+        ]);
+        assert_eq!(
+            cli.command(),
+            Command::CreateUser {
+                username: "admin".into(),
+                password_stdin: true
+            }
+        );
     }
 
     #[test]
