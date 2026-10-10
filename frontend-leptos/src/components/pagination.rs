@@ -17,7 +17,7 @@ pub fn Pagination(page: u32, per_page: u32, total: u64, on_page: Callback<u32>) 
             <nav class="pagination">
                 <button
                     class="secondary outline"
-                    disabled=page <= 1
+                    disabled=move || page <= 1
                     on:click=move |_| on_page.run(page - 1)
                 >
                     "Prev"
@@ -25,7 +25,9 @@ pub fn Pagination(page: u32, per_page: u32, total: u64, on_page: Callback<u32>) 
                 <span>{format!("Page {page} of {pages}")}</span>
                 <button
                     class="secondary outline"
-                    disabled=page >= pages
+                    // `>` would end the tag inside `view!`, so compound attribute
+                    // expressions go in a closure (or braces).
+                    disabled=move || page >= pages
                     on:click=move |_| on_page.run(page + 1)
                 >
                     "Next"
