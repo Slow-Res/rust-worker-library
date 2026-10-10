@@ -11,6 +11,7 @@ setup: ## Check tools, install npm deps, create the dev database
 	$(MAKE) db
 
 db: ## Create and migrate the dev database
+	mkdir -p data
 	sqlx database create
 	sqlx migrate run --source backend/migrations
 
