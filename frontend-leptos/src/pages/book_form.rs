@@ -90,7 +90,6 @@ pub fn BookEdit() -> impl IntoView {
     let book = LocalResource::new(move || async move { api::books::get(id).await });
 
     view! {
-        <h1>"Edit book"</h1>
         <Suspense fallback=|| view! { <p aria-busy="true">"Loading…"</p> }>
             {move || {
                 book.get()
@@ -99,6 +98,7 @@ pub fn BookEdit() -> impl IntoView {
                         Err(e) => view! { <ErrorMessage error=e/> }.into_any(),
                         Ok(book) => {
                             view! {
+                                <h1>"Edit book"</h1>
                                 <BookForm
                                     initial=BookFormValues::from_book(&book)
                                     save=move |input| async move {
@@ -154,11 +154,12 @@ where
         busy.set(true);
         let (save, navigate) = (save.clone(), navigate.clone());
         spawn_local(async move {
-            match save(input).await {
+            let result = save(input).await;
+            busy.set(false);
+            match result {
                 Ok(()) => navigate("/books", Default::default()),
                 Err(e) => error.set(Some(e)),
             }
-            busy.set(false);
         });
     };
 
@@ -173,7 +174,9 @@ where
     let invalid = move |name: &'static str| field(name).get().is_some().then_some("true");
 
     view! {
-        <form on:submit=on_submit>
+        // `novalidate` turns off the browser's own validation bubbles so the
+        // server's field errors (shown by <FieldError>) are what users see.
+        <form novalidate on:submit=on_submit>
             <label>
                 "Title"
                 <input
