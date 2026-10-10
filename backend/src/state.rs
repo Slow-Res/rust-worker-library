@@ -6,6 +6,7 @@ use axum::extract::FromRef;
 use sqlx::SqlitePool;
 
 use crate::auth::{AuthService, SqliteAuthRepository};
+use crate::books::{BookService, SqliteBookRepository};
 use crate::clock::Clock;
 use crate::config::Config;
 
@@ -23,6 +24,7 @@ pub struct AppState {
     /// (the real one in production, a fixed one in tests).
     pub clock: Arc<dyn Clock>,
     pub auth: AuthService,
+    pub books: BookService,
 }
 
 impl AppState {
@@ -32,11 +34,16 @@ impl AppState {
             clock.clone(),
             chrono::Duration::hours(config.session_ttl_hours),
         );
+        let books = BookService::new(
+            Arc::new(SqliteBookRepository::new(pool.clone())),
+            clock.clone(),
+        );
         Self {
             pool,
             config,
             clock,
             auth,
+            books,
         }
     }
 }
