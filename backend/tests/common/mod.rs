@@ -27,6 +27,8 @@ use tower::ServiceExt;
 pub type TestResponse = (StatusCode, HeaderMap, Value);
 
 /// The real router wired to a fresh test database and a controllable clock.
+/// Cloning is cheap (everything inside is a handle), which lets tests fire concurrent requests.
+#[derive(Clone)]
 pub struct TestApp {
     pub router: Router,
     pub auth: AuthService,
@@ -52,6 +54,17 @@ impl TestApp {
             pool,
             Config {
                 frontend_dir: Some(dir),
+                ..test_config()
+            },
+        )
+    }
+
+    /// Like [`new`](Self::new) but with `COOKIE_SECURE=true`.
+    pub fn with_secure_cookie(pool: SqlitePool) -> Self {
+        Self::with_config(
+            pool,
+            Config {
+                cookie_secure: true,
                 ..test_config()
             },
         )

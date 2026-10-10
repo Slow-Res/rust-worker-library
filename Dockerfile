@@ -43,6 +43,7 @@ RUN apt-get update \
 COPY --from=backend /app/target/release/library-backend /usr/local/bin/library-backend
 COPY --from=react /app/frontend-react/dist /srv/frontend
 
+# Set COOKIE_SECURE=true when the app is served over HTTPS.
 ENV DATABASE_URL=sqlite:///data/library.db \
     BIND_ADDR=0.0.0.0:4000 \
     FRONTEND_DIR=/srv/frontend \

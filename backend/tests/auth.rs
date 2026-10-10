@@ -25,7 +25,20 @@ async fn login_success_returns_user_and_cookie(pool: SqlitePool) {
     assert!(cookie.contains("SameSite=Lax"), "{cookie}");
     assert!(cookie.contains("Path=/"), "{cookie}");
     assert!(cookie.contains("Max-Age=604800"), "{cookie}");
-    assert!(!cookie.contains("Secure"), "{cookie}");
+    assert!(!cookie.contains("; Secure"), "{cookie}");
+}
+
+#[sqlx::test]
+async fn secure_config_marks_the_cookie_secure(pool: SqlitePool) {
+    let app = TestApp::with_secure_cookie(pool);
+    app.auth.create_user("ada", "password123").await.unwrap();
+
+    let body = json!({ "username": "ada", "password": "password123" });
+    let (status, headers, _) = app.post_json("/api/auth/login", &body, None).await;
+
+    assert_eq!(status, StatusCode::OK);
+    let cookie = headers[header::SET_COOKIE].to_str().unwrap();
+    assert!(cookie.contains("; Secure"), "{cookie}");
 }
 
 #[sqlx::test]
