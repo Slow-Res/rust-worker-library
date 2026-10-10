@@ -17,6 +17,7 @@ use crate::auth;
 use crate::books;
 use crate::error::AppError;
 use crate::health;
+use crate::members;
 use crate::state::AppState;
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
@@ -30,6 +31,7 @@ pub fn build_router(state: AppState) -> Router {
         .merge(health::routes())
         .merge(auth::routes())
         .merge(books::routes())
+        .merge(members::routes())
         .fallback(api_not_found);
 
     let mut app = Router::new().nest("/api", api);
