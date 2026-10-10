@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use chrono::{DateTime, Duration, Utc};
+use chrono::Duration;
 use library_shared::{CurrentUser, LoginRequest};
 use rand::TryRng;
 use rand::rngs::SysRng;
@@ -25,7 +25,6 @@ pub struct LoginSession {
     pub user: CurrentUser,
     /// The raw token. Only ever sent to the client; never stored.
     pub token: String,
-    pub expires_at: DateTime<Utc>,
 }
 
 /// Cheap to clone (two `Arc`s and a number), so it can live in `AppState`.
@@ -49,6 +48,7 @@ impl AuthService {
         }
     }
 
+    /// How long a session lasts; the route uses it for the cookie's `Max-Age`.
     pub fn session_ttl(&self) -> Duration {
         self.session_ttl
     }
@@ -123,7 +123,10 @@ impl AuthService {
             .create_session(&hash_token(&token), user.id, now, expires_at)
             .await?;
         // Housekeeping: expired sessions are swept whenever someone logs in.
-        self.repo.delete_expired_sessions(now).await?;
+        // The session already exists, so a failed sweep must not fail the login.
+        if let Err(err) = self.repo.delete_expired_sessions(now).await {
+            tracing::warn!(error = ?err, "failed to sweep expired sessions");
+        }
 
         Ok(LoginSession {
             user: CurrentUser {
@@ -131,7 +134,6 @@ impl AuthService {
                 username: user.username,
             },
             token,
-            expires_at,
         })
     }
 
@@ -172,7 +174,79 @@ fn hash_token(token: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use async_trait::async_trait;
+    use chrono::{DateTime, Utc};
+
     use super::*;
+    use crate::auth::repo::{SessionUser, UserRecord};
+    use crate::clock::FixedClock;
+
+    /// A repository whose session sweep always fails; everything else succeeds.
+    struct FailingSweepRepo;
+
+    #[async_trait]
+    impl AuthRepository for FailingSweepRepo {
+        async fn create_user(&self, _: &str, _: &str, _: DateTime<Utc>) -> Result<i64, RepoError> {
+            Ok(1)
+        }
+
+        async fn find_user_by_username(
+            &self,
+            username: &str,
+        ) -> Result<Option<UserRecord>, RepoError> {
+            Ok(Some(UserRecord {
+                id: 1,
+                username: username.to_owned(),
+                password_hash: hash_password("correct horse".to_owned()).await.unwrap(),
+            }))
+        }
+
+        async fn create_session(
+            &self,
+            _: &str,
+            _: i64,
+            _: DateTime<Utc>,
+            _: DateTime<Utc>,
+        ) -> Result<(), RepoError> {
+            Ok(())
+        }
+
+        async fn find_session_user(
+            &self,
+            _: &str,
+            _: DateTime<Utc>,
+        ) -> Result<Option<SessionUser>, RepoError> {
+            Ok(None)
+        }
+
+        async fn delete_session(&self, _: &str) -> Result<(), RepoError> {
+            Ok(())
+        }
+
+        async fn delete_expired_sessions(&self, _: DateTime<Utc>) -> Result<(), RepoError> {
+            Err(RepoError::Unexpected(anyhow::anyhow!("sweep failed")))
+        }
+    }
+
+    #[tokio::test]
+    async fn login_succeeds_even_if_the_expired_session_sweep_fails() {
+        let service = AuthService::new(
+            Arc::new(FailingSweepRepo),
+            Arc::new(FixedClock::new(
+                DateTime::from_timestamp(1_800_000_000, 0).unwrap(),
+            )),
+            Duration::hours(1),
+        );
+        let session = service
+            .login(LoginRequest {
+                username: "admin".into(),
+                password: "correct horse".into(),
+            })
+            .await
+            .unwrap();
+        assert_eq!(session.user.username, "admin");
+        assert_eq!(session.token.len(), 64);
+    }
 
     #[test]
     fn token_is_64_hex_chars_and_unique() {

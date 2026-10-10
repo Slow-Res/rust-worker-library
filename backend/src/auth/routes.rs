@@ -53,9 +53,8 @@ async fn logout(
     jar: CookieJar,
 ) -> Result<(CookieJar, StatusCode), AppError> {
     // `AuthUser` already proved the cookie exists and is valid.
-    if let Some(cookie) = jar.get(SESSION_COOKIE) {
-        auth.logout(cookie.value()).await?;
-    }
+    let cookie = jar.get(SESSION_COOKIE).ok_or(AppError::Unauthorized)?;
+    auth.logout(cookie.value()).await?;
     tracing::debug!(user_id = user.id, "logged out");
     let removal = Cookie::build((SESSION_COOKIE, ""))
         .path("/")
