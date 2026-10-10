@@ -7,6 +7,13 @@ use leptos::prelude::*;
 
 const DEBOUNCE: Duration = Duration::from_millis(300);
 
+/// Whether the input should adopt the committed (URL) value. Callers trim
+/// what they commit, so a trailing space the user typed must not count as a
+/// difference, and nothing is overwritten while a debounce is pending.
+fn should_sync(text: &str, committed: &str, typing: bool) -> bool {
+    !typing && text.trim() != committed.trim()
+}
+
 /// `value` is the committed value (usually read from the URL); `on_change`
 /// receives the new text once typing pauses.
 #[component]
@@ -29,7 +36,7 @@ pub fn SearchBox(
     // input in step when the URL changes from outside (Back button, "reset").
     Effect::new(move |_| {
         let committed = value.get();
-        if !typing.get_value() && text.get_untracked() != committed {
+        if should_sync(&text.get_untracked(), &committed, typing.get_value()) {
             text.set(committed);
         }
     });
@@ -51,5 +58,26 @@ pub fn SearchBox(
             prop:value=move || text.get()
             on:input=on_input
         />
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn does_not_sync_while_typing() {
+        assert!(!should_sync("ab", "a", true));
+    }
+
+    #[test]
+    fn keeps_trailing_space_of_trimmed_commit() {
+        assert!(!should_sync("war ", "war", false));
+    }
+
+    #[test]
+    fn syncs_external_changes() {
+        assert!(should_sync("war", "", false));
+        assert!(should_sync("war", "peace", false));
     }
 }
