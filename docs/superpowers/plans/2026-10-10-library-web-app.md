@@ -97,7 +97,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 cargo test -p library-shared --features ts && git status --short frontend-react/src/generated
 cd backend && cargo sqlx prepare && cd .. && SQLX_OFFLINE=true cargo build -p library-backend
-cargo run -p library-backend   # then: curl -i localhost:3000/api/health ; curl -i localhost:3000/api/nope ; Ctrl-C shuts down cleanly
+cargo run -p library-backend   # then: curl -i localhost:4000/api/health ; curl -i localhost:4000/api/nope ; Ctrl-C shuts down cleanly
 ```
 (If no `query!` macros exist yet, `cargo sqlx prepare` may produce nothing —
 that is fine; make sure `backend/.sqlx/` exists with a `.gitkeep` if empty.)
@@ -249,7 +249,7 @@ not modify any Rust code).
 
 **Create:** Vite React-TS app (`npm create vite@latest` equivalent, then
 trim boilerplate), `vite.config.ts` (port 5173, proxy `/api` →
-`http://127.0.0.1:3000`), strict `tsconfig`, ESLint config from template,
+`http://127.0.0.1:4000`), strict `tsconfig`, ESLint config from template,
 Vitest + Testing Library + jsdom setup, `src/` structure from spec §7, Pico
 CSS imported once, `src/app.css` minimal. `package.json` scripts: `dev`,
 `build` (`tsc -b && vite build`), `lint`, `typecheck`, `test` (`vitest run`),
@@ -287,7 +287,7 @@ structure file-for-file where it makes sense. Do not modify `shared/`,
 `library-shared` path dep without the `ts` feature, workspace lints),
 `index.html` (Trunk: `<link data-trunk rel="rust" data-wasm-opt="z" />`,
 `<link data-trunk rel="css" href="assets/pico.min.css" />`, app css),
-`Trunk.toml` (port 8080, proxy `/api` → `http://127.0.0.1:3000/api`),
+`Trunk.toml` (port 8080, proxy `/api` → `http://127.0.0.1:4000/api`),
 `assets/pico.min.css` (Pico v2, same version as React's, copied from the npm
 package or its CDN `https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css`),
 `assets/app.css` (same rules as React's `app.css`), `src/` per spec §7.
@@ -332,7 +332,7 @@ to date: regenerate then `git diff --exit-code`).
   both frontends, and includes measured release bundle sizes (gzip) for both.
 - README quick start must work verbatim on a fresh clone (verify it).
 - Docker image builds and runs: `docker build -t library-web-app .` and
-  `docker run -p 3000:3000 -v library-data:/data library-web-app`, health
+  `docker run -p 4000:4000 -v library-data:/data library-web-app`, health
   endpoint OK (if Docker is unavailable, say so in the report; still keep the
   Dockerfile correct by inspection).
 

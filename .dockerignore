@@ -1,0 +1,11 @@
+# Keep the build context small and the layer cache stable.
+.git
+.github
+.superpowers
+.playwright-mcp
+.env
+**/target
+**/node_modules
+**/dist
+data
+docs
